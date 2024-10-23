@@ -13,7 +13,9 @@ import pickle
 import copy
 import matplotlib.ticker as tkr
 
-fDataDir = r'C:\OUTPUT\iQID Coreg\September 2024\T1-048-Kidney-7-9-11'
+
+fMainDir = r'C:\OUTPUT\iQID Coreg\September 2024'
+
 
 LambdaAcDays = np.log(2)/9.9
 LambdaAcSeconds = LambdaAcDays / (24*60*60)
@@ -224,246 +226,254 @@ def matchPointClouds(coords, imageStack: list[sitk.Image]) -> tuple[list[sitk.Im
 
     return returnImageList, returnTransformationList
 ####################
+dirs = [pjoin(fMainDir, i) for i in os.listdir(fMainDir)]
 
-#%%
-numSlides = len([i for i in glob(pjoin(fDataDir, 'alphaImgHiRes_*.nii')) if '_corr.nii' not in i ])
+for fDataDir in dirs:
 
-alphaCameraSlides = [sitk.ReadImage(pjoin(fDataDir, f'alphaImgHiRes_{i}.nii')) for i in range(numSlides)]
-HESlides = [srgb2gray(sitk.ReadImage(pjoin(fDataDir, f'HE_{i}.nii')))  for i in range(numSlides)]
+    #%%
 
+    numSlides = len([i for i in glob(pjoin(fDataDir, 'alphaImgHiRes_*.nii')) if '_corr.nii' not in i ])
 
-#quick sanity check to see if all "sections" are true sections
-if len(alphaCameraSlides) > 2:
-    slideSelectionSum = [np.sum(sitk.GetArrayFromImage(i)) for i in alphaCameraSlides]
-    slideSelectionMask = [ i > 0.50* np.median(slideSelectionSum) for i in slideSelectionSum]
-    alphaCameraSlides = [alphaCameraSlides[ix] for ix, i in enumerate(slideSelectionMask) if i == True]
-    HESlides = [HESlides[ix] for ix, i in enumerate(slideSelectionMask) if i == True]
+    if numSlides < 2: continue
 
-# _ = [print(i.GetOrigin()) for i in HESlides]
-_ = [i.SetOrigin((0.,0.)) for i in HESlides]
-_ = [i.SetDirection(np.eye(2).flatten()) for i in HESlides]
-_ = [i.SetOrigin((0.,0.)) for i in alphaCameraSlides]
-_ = [i.SetDirection(np.eye(2).flatten()) for i in alphaCameraSlides]
+    alphaCameraSlides = [sitk.ReadImage(pjoin(fDataDir, f'alphaImgHiRes_{i}.nii')) for i in range(numSlides)]
+    HESlides = [srgb2gray(sitk.ReadImage(pjoin(fDataDir, f'HE_{i}.nii')))  for i in range(numSlides)]
 
 
-#Grab matching landmarks
-coords = getCorrespondingSections(HESlides)
-with open(pjoin(fDataDir,'coordsDumpDosimetry.pic'), 'wb') as f:
-    pickle.dump(coords, f)
+    #quick sanity check to see if all "sections" are true sections
+    if len(alphaCameraSlides) > 2:
+        slideSelectionSum = [np.sum(sitk.GetArrayFromImage(i)) for i in alphaCameraSlides]
+        slideSelectionMask = [ i > 0.50* np.median(slideSelectionSum) for i in slideSelectionSum]
+        alphaCameraSlides = [alphaCameraSlides[ix] for ix, i in enumerate(slideSelectionMask) if i == True]
+        HESlides = [HESlides[ix] for ix, i in enumerate(slideSelectionMask) if i == True]
 
+    # _ = [print(i.GetOrigin()) for i in HESlides]
+    _ = [i.SetOrigin((0.,0.)) for i in HESlides]
+    _ = [i.SetDirection(np.eye(2).flatten()) for i in HESlides]
+    _ = [i.SetOrigin((0.,0.)) for i in alphaCameraSlides]
+    _ = [i.SetDirection(np.eye(2).flatten()) for i in alphaCameraSlides]
 
-#%%
-#Match all the slides to the first one
-
-with open(pjoin(fDataDir,'coordsDumpDosimetry.pic'), 'rb') as f:
-    coords = pickle.load(f)
-
-
-HESlidesLandmarkMatched, HESlidesNewOrientation = matchPointClouds(coords, HESlides)
-
-
-for ix, HESlidesMatched in enumerate( HESlidesLandmarkMatched ):
-    sitk.WriteImage( HESlidesMatched, pjoin(fDataDir,f'CoregHE{ix}.nii'))
 
-alphaCameraLandmarkMatched, alphaCameraSlidesNewOrientation = matchPointClouds(coords, alphaCameraSlides)
+    #Grab matching landmarks
+    if not os.path.isfile(pjoin(fDataDir,'coordsDumpDosimetry.pic')):
+        coords = getCorrespondingSections(HESlides)
+        with open(pjoin(fDataDir,'coordsDumpDosimetry.pic'), 'wb') as f:
+            pickle.dump(coords, f)
 
 
-for ix, AlphaMatched in enumerate( alphaCameraLandmarkMatched ):
-    sitk.WriteImage( AlphaMatched, pjoin(fDataDir,f'CoregAlpha{ix}.nii'))
+    #%%
+    #Match all the slides to the first one
 
-#%%
+    with open(pjoin(fDataDir,'coordsDumpDosimetry.pic'), 'rb') as f:
+        coords = pickle.load(f)
 
-for ix, movingImagez in enumerate(HESlidesLandmarkMatched):
-    if ix == 0: continue
+
+    HESlidesLandmarkMatched, HESlidesNewOrientation = matchPointClouds(coords, HESlides)
 
-    fixedImage = HESlidesLandmarkMatched[0]
-    movingImage = movingImagez
-    #Now coregister everything
-    parMap = sitk.GetDefaultParameterMap("rigid")
-    parMap['AutomaticTransformInitialization'] = ('true',)
-    # parMap['Transform'] = ('SimilarityTransform',)
-    # parMap['ImageSampler'] = ('RandomSparseMask',)
-    parMap['MaximumNumberOfIterations'] = ("2580",)
-    parMap['NumberOfResolutions'] = ('4',)
-    # parMap['Metric'] = ('AdvancedNormalizedCorrelation',)
 
-    parMap2 = sitk.GetDefaultParameterMap("rigid")
-    parMap2['Transform'] = ('SimilarityTransform',)
-    # parMap2['Metric'] = ('AdvancedNormalizedCorrelation',)
-    parMap2['AutomaticTransformInitialization'] = ('false',)
-    # parMap2['ImageSampler'] = ('RandomSparseMask',)
-    parMap2['NumberOfResolutions'] = ('1',)
-    parMap2['NumberOfSpatialSamples'] = (
-        str(int(np.prod(movingImage.GetSize()) * 0.10)),)
-    parMap2['MaximumNumberOfIterations'] = ("4000",)
-    # parMap2['ASGDParameterEstimationMethod'] = ("DisplacementDistribution",)
-    # parMap2['NumberOfSpatialSamples'] = (
-    #     str(int(np.prod(fixedImage.GetSize()) * 0.10)),)
-    # parMap2['MaximumNumberOfIterations'] = ("4000",)
-    # parMap2['CheckNumberOfSamples'] = ('false',)
+    for ix, HESlidesMatched in enumerate( HESlidesLandmarkMatched ):
+        sitk.WriteImage( HESlidesMatched, pjoin(fDataDir,f'CoregHE{ix}.nii'))
 
-    parMap3 = sitk.GetDefaultParameterMap('bspline')
-    # parMap3['NumberOfResolutions']= ("1",)
-    # parMap3['GridSpacingSchedule'] = (str(1.4 * alphaImg.GetSpacing()[0]), str(1.0 * alphaImg.GetSpacing()[0]))
-    # parMap3['GridSpacingSchedule'] = ("5",)
-    parMap3['ASGDParameterEstimationMethod'] = ("DisplacementDistribution",)
-    parMap3['FinalGridSpacingInPhysicalUnits'] = (str(25*movingImage.GetSpacing()[0]),)
-    parMap3['GridSpacingSchedule'] = (str(10.0 * movingImage.GetSpacing()[0]),str(5.0 * movingImage.GetSpacing()[0]),str(2.0 * movingImage.GetSpacing()[0]),str(1.0 * movingImage.GetSpacing()[0]),)
-    parMap3['ASGDParameterEstimationMethod'] = ("DisplacementDistribution",)
+    alphaCameraLandmarkMatched, alphaCameraSlidesNewOrientation = matchPointClouds(coords, alphaCameraSlides)
 
 
-    # parMap3['MovingImagePyramid'] = ("MovingShrinkingImagePyramid",)
-    # parMap3['FixedImagePyramid'] = ("FixedShrinkingImagePyramid",)
-    parMap3['Metric'] = ("AdvancedMattesMutualInformation","TransformBendingEnergyPenalty")
-    # parMap3['Metric'] = ("AdvancedNormalizedCorrelation","TransformBendingEnergyPenalty")
-    parMap3['Metric1Weight'] = ("2.5",)
-    parMap3['MaximumNumberOfIterations'] = ("2000",)
-    #Important to do this or not? Might want to keep scaling??
+    for ix, AlphaMatched in enumerate( alphaCameraLandmarkMatched ):
+        sitk.WriteImage( AlphaMatched, pjoin(fDataDir,f'CoregAlpha{ix}.nii'))
 
+    #%%
 
-    parMaps = sitk.VectorOfParameterMap()
-    parMaps.append(parMap)
-    parMaps.append(parMap2)
-    parMaps.append(parMap3)
+    for ix, movingImagez in enumerate(HESlidesLandmarkMatched):
+        # if ix == 1: continue
 
-    elastixImageFilter = sitk.ElastixImageFilter()
-    elastixImageFilter.SetParameterMap(parMaps)
-    elastixImageFilter.SetMovingImage(movingImagez)
-    elastixImageFilter.SetFixedImage(fixedImage)
-    elastixImageFilter.SetLogToFile(False)
-    elastixImageFilter.SetLogToConsole(True)
-    elastixImageFilter.Execute()
+        fixedImage = HESlidesLandmarkMatched[1]
+        movingImage = movingImagez
+        #Now coregister everything
+        parMap = sitk.GetDefaultParameterMap("rigid")
+        parMap['AutomaticTransformInitialization'] = ('true',)
+        # parMap['Transform'] = ('SimilarityTransform',)
+        # parMap['ImageSampler'] = ('RandomSparseMask',)
+        parMap['MaximumNumberOfIterations'] = ("2580",)
+        parMap['NumberOfResolutions'] = ('4',)
+        # parMap['Metric'] = ('AdvancedNormalizedCorrelation',)
 
-    transMap = elastixImageFilter.GetTransformParameterMap()
+        parMap2 = sitk.GetDefaultParameterMap("rigid")
+        parMap2['Transform'] = ('SimilarityTransform',)
+        # parMap2['Metric'] = ('AdvancedNormalizedCorrelation',)
+        parMap2['AutomaticTransformInitialization'] = ('false',)
+        # parMap2['ImageSampler'] = ('RandomSparseMask',)
+        parMap2['NumberOfResolutions'] = ('1',)
+        parMap2['NumberOfSpatialSamples'] = (
+            str(int(np.prod(movingImage.GetSize()) * 0.10)),)
+        parMap2['MaximumNumberOfIterations'] = ("4000",)
+        # parMap2['ASGDParameterEstimationMethod'] = ("DisplacementDistribution",)
+        # parMap2['NumberOfSpatialSamples'] = (
+        #     str(int(np.prod(fixedImage.GetSize()) * 0.10)),)
+        # parMap2['MaximumNumberOfIterations'] = ("4000",)
+        # parMap2['CheckNumberOfSamples'] = ('false',)
 
-    sitk.WriteImage(elastixImageFilter.GetResultImage(), pjoin(fDataDir, f'movingImg_{ix}.nii'))
+        parMap3 = sitk.GetDefaultParameterMap('bspline')
+        # parMap3['NumberOfResolutions']= ("1",)
+        # parMap3['GridSpacingSchedule'] = (str(1.4 * alphaImg.GetSpacing()[0]), str(1.0 * alphaImg.GetSpacing()[0]))
+        # parMap3['GridSpacingSchedule'] = ("5",)
+        parMap3['ASGDParameterEstimationMethod'] = ("DisplacementDistribution",)
+        parMap3['FinalGridSpacingInPhysicalUnits'] = (str(25*movingImage.GetSpacing()[0]),)
+        parMap3['GridSpacingSchedule'] = (str(10.0 * movingImage.GetSpacing()[0]),str(5.0 * movingImage.GetSpacing()[0]),str(2.0 * movingImage.GetSpacing()[0]),str(1.0 * movingImage.GetSpacing()[0]),)
+        parMap3['ASGDParameterEstimationMethod'] = ("DisplacementDistribution",)
 
-    ##Apply the same transmap to the alpha camera images
 
-    numTransforms = len(transMap)
-    transforms = [sitk.ReadParameterFile(f'TransformParameters.{i}.txt') for i in range(numTransforms)]
-    #making sure initial tansfroms are correct
-    for trans in transforms:
-        trans['InitialTransformParametersFileName'] =  ("NoInitialTransform",)
+        # parMap3['MovingImagePyramid'] = ("MovingShrinkingImagePyramid",)
+        # parMap3['FixedImagePyramid'] = ("FixedShrinkingImagePyramid",)
+        parMap3['Metric'] = ("AdvancedMattesMutualInformation","TransformBendingEnergyPenalty")
+        # parMap3['Metric'] = ("AdvancedNormalizedCorrelation","TransformBendingEnergyPenalty")
+        parMap3['Metric1Weight'] = ("2.5",)
+        parMap3['MaximumNumberOfIterations'] = ("2000",)
+        #Important to do this or not? Might want to keep scaling??
 
-    transforms2 = correctResolutionTransform(transforms, alphaCameraLandmarkMatched[ix])
-   
-    strx = sitk.TransformixImageFilter()
-    strx.ComputeDeterminantOfSpatialJacobianOn()
-    strx.SetTransformParameterMap(transforms2)
-    strx.SetMovingImage(alphaCameraLandmarkMatched[ix])
-    strx.SetOutputDirectory('.')
-    strx.Execute()
-    correctedAlphaCamera = strx.GetResultImage()
-    jacobian = sitk.ReadImage('spatialJacobian.nii')
-    correctedAlphaCamera = correctedAlphaCamera * jacobian
 
-    # correctedAlphaCamera = sitk.Transformix( alphaCameraLandmarkMatched[ix], transforms )
-    sitk.WriteImage(correctedAlphaCamera, pjoin(fDataDir,f'movingAlphaCamera_{ix}.nii'))
+        parMaps = sitk.VectorOfParameterMap()
+        parMaps.append(parMap)
+        parMaps.append(parMap2)
+        parMaps.append(parMap3)
 
+        elastixImageFilter = sitk.ElastixImageFilter()
+        elastixImageFilter.SetParameterMap(parMaps)
+        elastixImageFilter.SetMovingImage(movingImagez)
+        elastixImageFilter.SetFixedImage(fixedImage)
+        elastixImageFilter.SetLogToFile(False)
+        elastixImageFilter.SetLogToConsole(True)
+        elastixImageFilter.Execute()
 
+        transMap = elastixImageFilter.GetTransformParameterMap()
 
-sitk.WriteImage( alphaCameraSlides[0], pjoin(fDataDir,'fixedAlphaCamera.nii'))
+        sitk.WriteImage(elastixImageFilter.GetResultImage(), pjoin(fDataDir, f'movingImg_{ix}.nii'))
 
-sitk.WriteImage(HESlides[0], pjoin(fDataDir,'fixedImag.nii'))
+        ##Apply the same transmap to the alpha camera images
 
-#%% Now Run Dose Rate Calc For middle slide
+        numTransforms = len(transMap)
+        transforms = [sitk.ReadParameterFile(f'TransformParameters.{i}.txt') for i in range(numTransforms)]
+        #making sure initial tansfroms are correct
+        for trans in transforms:
+            trans['InitialTransformParametersFileName'] =  ("NoInitialTransform",)
 
-fAlphaCameraImages = [pjoin(fDataDir, 'fixedAlphaCamera.nii')] + [pjoin(fDataDir, i) for i in glob('movingAlphaCamera_*.nii', root_dir=fDataDir)]
-fAlphaCameraImages = 5* [fAlphaCameraImages[0]] + [fAlphaCameraImages[1]] + 5*[fAlphaCameraImages[2]]
-alphaCameraImages = sitk.JoinSeries( [sitk.ReadImage(i, sitk.sitkFloat32) for i in fAlphaCameraImages] )
+        transforms2 = correctResolutionTransform(transforms, alphaCameraLandmarkMatched[ix])
+    
+        strx = sitk.TransformixImageFilter()
+        strx.ComputeDeterminantOfSpatialJacobianOn()
+        strx.SetTransformParameterMap(transforms2)
+        strx.SetMovingImage(alphaCameraLandmarkMatched[ix])
+        strx.SetOutputDirectory('.')
+        strx.Execute()
+        correctedAlphaCamera = strx.GetResultImage()
+        jacobian = sitk.ReadImage('spatialJacobian.nii')
+        jacobian = sitk.Resample(jacobian, correctedAlphaCamera, sitk.Transform(), sitk.sitkNearestNeighbor)
+        correctedAlphaCamera = correctedAlphaCamera * jacobian
 
-alphaCameraImages.SetSpacing( list(alphaCameraImages.GetSpacing()[:2]) + [14.*2] )
-alphaCameraImages.SetOrigin( list(alphaCameraImages.GetOrigin()[:2]) + [-5*14.] )
+        # correctedAlphaCamera = sitk.Transformix( alphaCameraLandmarkMatched[ix], transforms )
+        sitk.WriteImage(correctedAlphaCamera, pjoin(fDataDir,f'movingAlphaCamera_{ix}.nii'))
 
 
-fHEIntensityImages = [pjoin(fDataDir, 'fixedImag.nii')] + [pjoin(fDataDir, i) for i in glob('movingImg_*.nii', root_dir=fDataDir)]
-fHEIntensityImages = 5* [fHEIntensityImages[0]] + [fHEIntensityImages[1]] + 5*[fHEIntensityImages[2]]
-HEIntensitySlides = sitk.JoinSeries( [sitk.ReadImage(i) for i in fHEIntensityImages] )
 
+    # sitk.WriteImage( alphaCameraSlides[1], pjoin(fDataDir,f'movingAlphaCamera_1.nii'))
 
-HEIntensitySlides.SetSpacing( list(HEIntensitySlides.GetSpacing()[:2]) + [14.*2] )
-HEIntensitySlides.SetOrigin( list(HEIntensitySlides.GetOrigin()[:2]) + [-5.*14.] )
+    # sitk.WriteImage(HESlides[1], pjoin(fDataDir,'movingImg_1.nii'))
 
+    #%% Now Run Dose Rate Calc For middle slide
 
-resampler = sitk.ResampleImageFilter()
-resampler.SetOutputOrigin(alphaCameraImages.GetOrigin())
-resampler.SetOutputSpacing( list(alphaCameraImages.GetSpacing()[:2]) + [14.] )
-resampler.SetOutputDirection(alphaCameraImages.GetDirection())
-resampler.SetInterpolator(sitk.sitkLinear)
-sz = list(alphaCameraImages.GetSize())
-sz[-1] = sz[-1]*2 - 1
-resampler.SetSize( sz )
-interPolatedAlphaCameraImages = resampler.Execute(alphaCameraImages)
+    fAlphaCameraImages = [pjoin(fDataDir, i) for i in glob('movingAlphaCamera_*.nii', root_dir=fDataDir)]
+    fAlphaCameraImages = 5* [fAlphaCameraImages[0]] + [fAlphaCameraImages[1]] + 5*[fAlphaCameraImages[2]]
+    alphaCameraImages = sitk.JoinSeries( [sitk.ReadImage(i, sitk.sitkFloat32) for i in fAlphaCameraImages] )
 
-sitk.WriteImage(interPolatedAlphaCameraImages, pjoin(fDataDir, 'interpolatedAlphaCameraImages.nii'))
+    alphaCameraImages.SetSpacing( list(alphaCameraImages.GetSpacing()[:2]) + [14.*2] )
+    alphaCameraImages.SetOrigin( list(alphaCameraImages.GetOrigin()[:2]) + [-5*14.] )
 
-#Do a simple DVK
-try:
-    DVK = sitk.ReadImage(r'DVK_DosePerDecay_Ac225_26_26_14.nii', sitk.sitkFloat32)
-except:
-    DVK = sitk.ReadImage(r'../DVK_DosePerDecay_Ac225_26_26_14.nii', sitk.sitkFloat32)
 
-DVK = sitk.PermuteAxes(DVK, [2,1,0])
-doseRateMap = sitk.Convolution( interPolatedAlphaCameraImages, DVK, normalize=False )
+    fHEIntensityImages = [pjoin(fDataDir, i) for i in glob('movingImg_*.nii', root_dir=fDataDir)]
+    fHEIntensityImages = 5* [fHEIntensityImages[0]] + [fHEIntensityImages[1]] + 5*[fHEIntensityImages[2]]
+    HEIntensitySlides = sitk.JoinSeries( [sitk.ReadImage(i) for i in fHEIntensityImages] )
 
-npDoseRateMap = sitk.GetArrayFromImage(doseRateMap)
-centralSliceNum = int(npDoseRateMap.shape[0]/2)
-npCentralSlice = npDoseRateMap[centralSliceNum,:: ]
 
-centralSlice = sitk.GetImageFromArray(npCentralSlice)
-centralSlice.SetSpacing(doseRateMap.GetSpacing())
-sitk.WriteImage( centralSlice, pjoin(fDataDir, 'DoseRateMap.nii'))
+    HEIntensitySlides.SetSpacing( list(HEIntensitySlides.GetSpacing()[:2]) + [14.*2] )
+    HEIntensitySlides.SetOrigin( list(HEIntensitySlides.GetOrigin()[:2]) + [-5.*14.] )
 
-npHEIntensitySlides = sitk.GetArrayFromImage(HEIntensitySlides)
-centralSliceNum =  int(npHEIntensitySlides.shape[0]/2)
-centralHESlice = sitk.GetImageFromArray(npHEIntensitySlides[centralSliceNum,::])
-centralHESlice.SetSpacing(HEIntensitySlides.GetSpacing())
-sitk.WriteImage( centralHESlice, pjoin(fDataDir, 'CentralHEIntensityMap.nii'))
 
+    resampler = sitk.ResampleImageFilter()
+    resampler.SetOutputOrigin(alphaCameraImages.GetOrigin())
+    resampler.SetOutputSpacing( list(alphaCameraImages.GetSpacing()[:2]) + [14.] )
+    resampler.SetOutputDirection(alphaCameraImages.GetDirection())
+    resampler.SetInterpolator(sitk.sitkLinear)
+    sz = list(alphaCameraImages.GetSize())
+    sz[-1] = sz[-1]*2 - 1
+    resampler.SetSize( sz )
+    interPolatedAlphaCameraImages = resampler.Execute(alphaCameraImages)
 
-#Can we overlay this with our current HE section?
+    sitk.WriteImage(interPolatedAlphaCameraImages, pjoin(fDataDir, 'interpolatedAlphaCameraImages.nii'))
 
-npCentralHESlide = sitk.GetArrayFromImage(centralHESlice)
-npHE = npCentralHESlide
+    #Do a simple DVK
+    try:
+        DVK = sitk.ReadImage(r'DVK_DosePerDecay_Ac225_26_26_14.nii', sitk.sitkFloat32)
+    except:
+        DVK = sitk.ReadImage(r'../DVK_DosePerDecay_Ac225_26_26_14.nii', sitk.sitkFloat32)
 
-alphaImg = sitk.Resample(centralSlice, centralHESlice, sitk.Transform(), sitk.sitkLinear)
-# sitk.WriteImage(alphaImg, pjoin(outputDir, f'alphaImgOverlay_{ix}.nii'))
+    DVK = sitk.PermuteAxes(DVK, [2,1,0])
+    doseRateMap = sitk.Convolution( interPolatedAlphaCameraImages, DVK, normalize=False )
 
-# Plot with contours [cut outs]
-npAlphaImg = sitk.GetArrayFromImage(alphaImg)
-npAlphaImg[npAlphaImg <=0] = 0
+    npDoseRateMap = sitk.GetArrayFromImage(doseRateMap)
+    centralSliceNum = int(npDoseRateMap.shape[0]/2)
+    npCentralSlice = npDoseRateMap[centralSliceNum,:: ]
 
-npAlphaImg /= npAlphaImg.sum()
-npAlphaImg *= npCentralSlice.sum()
+    centralSlice = sitk.GetImageFromArray(npCentralSlice)
+    centralSlice.SetSpacing(doseRateMap.GetSpacing())
+    sitk.WriteImage( centralSlice, pjoin(fDataDir, 'DoseRateMap.nii'))
 
-#Activity to total number of decays
-# npAlphaImg /= LambdaAcSeconds
+    npHEIntensitySlides = sitk.GetArrayFromImage(HEIntensitySlides)
+    centralSliceNum =  int(npHEIntensitySlides.shape[0]/2)
+    centralHESlice = sitk.GetImageFromArray(npHEIntensitySlides[centralSliceNum,::])
+    centralHESlice.SetSpacing(HEIntensitySlides.GetSpacing())
+    sitk.WriteImage( centralHESlice, pjoin(fDataDir, 'CentralHEIntensityMap.nii'))
 
-npAlphaImg *= 1E3 #Gy/s to milliGy/s
-npAlphaImg *= (60*60) #cGy/h
-npHE[npHE < 1E-4] = 1 #small fix from resampling and image intensity inversion
 
-fig, ax = plt.subplots()
-fig.set_size_inches((10, 10))
-plt.axis("off")
-im = ax.imshow(npHE, cmap = 'Grays')
-# levels = np.linspace(npAlphaImg.min(), np.percentile(npAlphaImg, 99.999), 5)
-levels = np.linspace(np.percentile(npAlphaImg, 35), npAlphaImg.max(), 10)
-CS = ax.contourf(npAlphaImg, levels, linewidths=0.1, alpha = 0.2, cmap='jet')
+    #Can we overlay this with our current HE section?
 
-CB = fig.colorbar(CS, shrink=0.4, format=tkr.FormatStrFormatter('%.2g'), pad=0.03)
-l, b, w, h = ax.get_position().bounds
-ll, bb, ww, hh = CB.ax.get_position().bounds
-CB.ax.set_position([ll, b + 0.1 * h, ww, h * 0.8])
-CB.set_label('Dose rate [mGy/hour]', rotation=270, labelpad=15 )
-plt.tight_layout()
-plt.savefig(pjoin(fDataDir, f"DoseRate_Contours.tif"), dpi=600)
+    npCentralHESlide = sitk.GetArrayFromImage(centralHESlice)
+    npHE = npCentralHESlide
 
+    alphaImg = sitk.Resample(centralSlice, centralHESlice, sitk.Transform(), sitk.sitkLinear)
+    # sitk.WriteImage(alphaImg, pjoin(outputDir, f'alphaImgOverlay_{ix}.nii'))
 
-# fig, ax = plt.subplots()
-# fig.set_size_inches((10, 10))
-# plt.axis("off")
-# im = ax.imshow(npHE, cmap = 'Grays')
-# plt.savefig(pjoin(fDataDir, f"HEGreys.tif"), dpi=600)
-# %%
+    # Plot with contours [cut outs]
+    npAlphaImg = sitk.GetArrayFromImage(alphaImg)
+    npAlphaImg[npAlphaImg <=0] = 0
+
+    npAlphaImg /= npAlphaImg.sum()
+    npAlphaImg *= npCentralSlice.sum()
+
+    #Activity to total number of decays
+    # npAlphaImg /= LambdaAcSeconds
+
+    npAlphaImg *= 1E3 #Gy/s to milliGy/s
+    npAlphaImg *= (60*60) #cGy/h
+    npHE[npHE < 1E-4] = 1 #small fix from resampling and image intensity inversion
+
+    fig, ax = plt.subplots()
+    fig.set_size_inches((10, 10))
+    plt.axis("off")
+    im = ax.imshow(npHE, cmap = 'Grays')
+    # levels = np.linspace(npAlphaImg.min(), np.percentile(npAlphaImg, 99.999), 5)
+    levels = np.linspace(np.percentile(npAlphaImg, 35), npAlphaImg.max(), 10)
+    CS = ax.contourf(npAlphaImg, levels, linewidths=0.1, alpha = 0.2, cmap='jet')
+
+    CB = fig.colorbar(CS, shrink=0.4, format=tkr.FormatStrFormatter('%.2g'), pad=0.03)
+    l, b, w, h = ax.get_position().bounds
+    ll, bb, ww, hh = CB.ax.get_position().bounds
+    CB.ax.set_position([ll, b + 0.1 * h, ww, h * 0.8])
+    CB.set_label('Dose rate [mGy/hour]', rotation=270, labelpad=15 )
+    plt.tight_layout()
+    plt.savefig(pjoin(fDataDir, f"DoseRate_Contours.tif"), dpi=600)
+
+
+    # fig, ax = plt.subplots()
+    # fig.set_size_inches((10, 10))
+    # plt.axis("off")
+    # im = ax.imshow(npHE, cmap = 'Grays')
+    # plt.savefig(pjoin(fDataDir, f"HEGreys.tif"), dpi=600)
+    # %%
