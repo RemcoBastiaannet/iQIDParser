@@ -1,0 +1,7 @@
+*.nii
+*.png
+*.log
+*.txt
+
+*.pyc
+*.pic
