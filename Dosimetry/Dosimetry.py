@@ -234,7 +234,7 @@ for fDataDir in dirs:
 
     numSlides = len([i for i in glob(pjoin(fDataDir, 'alphaImgHiRes_*.nii')) if '_corr.nii' not in i ])
 
-    if numSlides < 2: continue
+
 
     alphaCameraSlides = [sitk.ReadImage(pjoin(fDataDir, f'alphaImgHiRes_{i}.nii')) for i in range(numSlides)]
     HESlides = [srgb2gray(sitk.ReadImage(pjoin(fDataDir, f'HE_{i}.nii')))  for i in range(numSlides)]
@@ -246,7 +246,9 @@ for fDataDir in dirs:
         slideSelectionMask = [ i > 0.50* np.median(slideSelectionSum) for i in slideSelectionSum]
         alphaCameraSlides = [alphaCameraSlides[ix] for ix, i in enumerate(slideSelectionMask) if i == True]
         HESlides = [HESlides[ix] for ix, i in enumerate(slideSelectionMask) if i == True]
-
+    
+    if numSlides < 3: continue
+    
     # _ = [print(i.GetOrigin()) for i in HESlides]
     _ = [i.SetOrigin((0.,0.)) for i in HESlides]
     _ = [i.SetDirection(np.eye(2).flatten()) for i in HESlides]
@@ -316,7 +318,7 @@ for fDataDir in dirs:
         # parMap3['GridSpacingSchedule'] = (str(1.4 * alphaImg.GetSpacing()[0]), str(1.0 * alphaImg.GetSpacing()[0]))
         # parMap3['GridSpacingSchedule'] = ("5",)
         parMap3['ASGDParameterEstimationMethod'] = ("DisplacementDistribution",)
-        parMap3['FinalGridSpacingInPhysicalUnits'] = (str(25*movingImage.GetSpacing()[0]),)
+        parMap3['FinalGridSpacingInPhysicalUnits'] = (str(15*movingImage.GetSpacing()[0]),) #changed from 25 to see if we can fix small elastic deformation differences
         parMap3['GridSpacingSchedule'] = (str(10.0 * movingImage.GetSpacing()[0]),str(5.0 * movingImage.GetSpacing()[0]),str(2.0 * movingImage.GetSpacing()[0]),str(1.0 * movingImage.GetSpacing()[0]),)
         parMap3['ASGDParameterEstimationMethod'] = ("DisplacementDistribution",)
 
