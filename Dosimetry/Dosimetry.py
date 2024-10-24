@@ -234,7 +234,7 @@ for fDataDir in dirs:
 
     numSlides = len([i for i in glob(pjoin(fDataDir, 'alphaImgHiRes_*.nii')) if '_corr.nii' not in i ])
 
-
+    if numSlides < 3: continue
 
     alphaCameraSlides = [sitk.ReadImage(pjoin(fDataDir, f'alphaImgHiRes_{i}.nii')) for i in range(numSlides)]
     HESlides = [srgb2gray(sitk.ReadImage(pjoin(fDataDir, f'HE_{i}.nii')))  for i in range(numSlides)]
