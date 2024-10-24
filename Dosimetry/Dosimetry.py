@@ -227,7 +227,6 @@ def matchPointClouds(coords, imageStack: list[sitk.Image]) -> tuple[list[sitk.Im
     return returnImageList, returnTransformationList
 ####################
 dirs = [pjoin(fMainDir, i) for i in os.listdir(fMainDir)]
-
 for fDataDir in dirs:
 
     #%%
@@ -247,7 +246,7 @@ for fDataDir in dirs:
         alphaCameraSlides = [alphaCameraSlides[ix] for ix, i in enumerate(slideSelectionMask) if i == True]
         HESlides = [HESlides[ix] for ix, i in enumerate(slideSelectionMask) if i == True]
     
-    if numSlides < 3: continue
+    if len(alphaCameraSlides) < 3: continue
     
     # _ = [print(i.GetOrigin()) for i in HESlides]
     _ = [i.SetOrigin((0.,0.)) for i in HESlides]
