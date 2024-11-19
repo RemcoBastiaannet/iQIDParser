@@ -11,8 +11,10 @@ DOTSPACING= 1000 #micrometer
 FOV = 100000 #micrometer
 PIXELSPACING = 1/18.85 * 1000  #* 0.998701 #micron/pix
 
-fDotPattern = r'C:\Users\remco\Washington University in St. Louis\Bastiaannet Lab - Lab Management - Lab Management\Materials and Equipment\iQID\Johns Hopkins - iQID Mega -Scale and Dots\_DotsSUM_CameraID-21249222_images.tif'
-fSquarePattern = r'C:\Users\remco\Washington University in St. Louis\Bastiaannet Lab - Lab Management - Lab Management\Materials and Equipment\iQID\Johns Hopkins - iQID Mega -Scale and Dots\xy_SUM_CameraID-21249222_images.tif'
+# fDotPattern = r'C:\Users\remco\Washington University in St. Louis\Bastiaannet Lab - Lab Management - Lab Management\Materials and Equipment\iQID\Johns Hopkins - iQID Mega -Scale and Dots\_DotsSUM_CameraID-21249222_images.tif'
+# fSquarePattern = r'C:\Users\remco\Washington University in St. Louis\Bastiaannet Lab - Lab Management - Lab Management\Materials and Equipment\iQID\Johns Hopkins - iQID Mega -Scale and Dots\xy_SUM_CameraID-21249222_images.tif'
+fDotPattern = 'Dots.nii'
+fSquarePattern = r'Squares.nii'
 
 dotSpacingPixels = DOTSPACING/PIXELSPACING
 
@@ -48,9 +50,9 @@ def generateDotsPattern(dotPatternMeasured: sitk.Image, maxSize : int|None = Non
             npDotsGen[int(iX), int(iY)] = 1
 
 
-    npDotsGen[:, 0:230] = 0
-    npDotsGen[:, 2200:] = 0
-    npDotsGen[:170,:] = 0
+    # npDotsGen[:, 0:230] = 0
+    # npDotsGen[:, 2200:] = 0
+    # npDotsGen[:170,:] = 0
 
 
     dotsGen = sitk.GetImageFromArray(npDotsGen.astype(np.uint8))
@@ -313,7 +315,7 @@ sitk.WriteImage(CorrectedDotsMeasured, 'CorrectedDotsMeasured.nii')
 sitk.WriteImage(dotPatternMeasured, 'dotPatternMeasured.nii')
 
 
-# ### Do we have an equal number of dots in both cases?
+### Do we have an equal number of dots in both cases?
 # dotsCorrTH = sitk.OtsuThreshold(CorrectedDotsMeasured, 1, 0)
 # cc = sitk.ConnectedComponent(dotsCorrTH)
 # cc = sitk.RelabelComponent(cc, 30)
@@ -329,16 +331,7 @@ sitk.WriteImage(dotPatternMeasured, 'dotPatternMeasured.nii')
 # #YES!!!
 
 
-# #Now apply this correction to dot pattern, see what happens
-# dotPatternPerfect = sitk.Transformix(dotPatternMeasured, squaresMeasuredToperfect)
-
-# sitk.WriteImage(dotPatternPerfect, 'dotPatternFixed.nii')
-# sitk.WriteImage(dotsGenInMeasured, 'dotsGenInMeasured.nii')
-# sitk.WriteImage(dotPatternMeasured, 'dotPatternMeasured.nii')
-
-
-
-# # CorrectedMeasured, TransMeasurementToPerfect, squaresInMeasured = getCorrectionTransform(squarePatternMeasured, squaresGenInMeasured)
+# CorrectedMeasured, TransMeasurementToPerfect, squaresInMeasured = getCorrectionTransform(squarePatternMeasured, squaresGenInMeasured)
 
 # sitk.WriteImage(CorrectedMeasured, 'correctedSquresMeasured.nii')
 # sitk.WriteImage(squarePatternMeasured, 'squarePatternMeasured.nii')
@@ -372,6 +365,8 @@ strx.SetOutputDirectory('.')
 strx.Execute()
 
 jacobian = sitk.ReadImage('spatialJacobian.nii')
+sitk.WriteImage(jacobian, r'C:\OUTPUT\iQID Coreg\TransRectifyMeasurement_Jac.nii')
+
 sitk.GetArrayFromImage(jacobian).mean()
 
 corr = CorrectedDotsMeasured * jacobian
