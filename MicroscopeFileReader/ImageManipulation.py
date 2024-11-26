@@ -4,8 +4,7 @@ import numpy as np
 import SimpleITK as sitk
 import matplotlib.pyplot as plt
 import fill_voids
-import copy
-
+from skimage.exposure import equalize_adapthist, rescale_intensity
 # color norm. standard (from TCGA-A2-A3XS-DX1, Amgad et al, 2019)
 cnorm = {
     "mu": np.array([8.74108109, -0.12440419, 0.0444982]),
@@ -81,19 +80,37 @@ def resizeImg(img, new_size, interpolator=None) -> sitk.Image:
         return sitk.Resample(img, reference_image, sitk.Transform(), interpolator)
 
 
-def Mic2HE(NuclearStain: sitk.Image, CytosolStain: sitk.Image) -> sitk.Image:
+def Mic2HE(DAPI: sitk.Image, Phalloidin: sitk.Image, micScalingFactor) -> sitk.Image:
+    npNuclearStain = sitk.GetArrayFromImage(DAPI).astype(np.float32)
+    npCytosolStain = sitk.GetArrayFromImage(Phalloidin).astype(np.float32)  # *1.25
+    # p2, p98 = np.percentile(npNuclearStain[sitk.GetArrayViewFromImage(msk) != 0], (2,98))
+    p2, p98 = np.percentile(npNuclearStain[sitk.GetArrayViewFromImage(msk)!=0], (2,98))
+    npNuclearStain = rescale_intensity(npNuclearStain, in_range=(p2, p98))
+    npNuclearStain = equalize_adapthist(npNuclearStain, clip_limit=.01)
 
-    NuclearStain = sitk.Resample(NuclearStain, CytosolStain)
+    p2, p98 = np.percentile(npCytosolStain[sitk.GetArrayViewFromImage(msk)!=0], (2,98))
+    npCytosolStain = rescale_intensity(npCytosolStain, in_range=(p2, p98))
+    npCytosolStain = equalize_adapthist(npCytosolStain, clip_limit=.01)
 
-    npNuclearStain = sitk.GetArrayFromImage(NuclearStain).astype(np.float32)
-    npCytosolStain = sitk.GetArrayFromImage(CytosolStain).astype(np.float32)  # *1.25
+    # p2, p98 = np.percentile(npCytosolStain[sitk.GetArrayViewFromImage(msk)!=0], (2,98))
+    # npCytosolStain = rescale_intensity(npCytosolStain, in_range=(p2, p98))
 
-    gammaNuc = 1
-    gammaCyt = 0.8
-    A, B = 1, 1
+    # plt.figure()
+    # plt.imshow(npNuclearStain)
+
+
+    # npCytosolStain = npCytosolStain * sitk.GetArrayViewFromImage(msk)
+    # npNuclearStain = npNuclearStain * sitk.GetArrayFromImage(msk)
+
+    # gammaNuc = .75
+    # gammaCyt = .85
+
+    gammaNuc = 3
+    gammaCyt = 1.1
+    A, B = .7, .9
 
     npNuclearStain = A * npNuclearStain ** (gammaNuc)
-    npCytosolStain = B * npCytosolStain ** (gammaCyt)
+    npCytosolStain = B * (npCytosolStain) ** (gammaCyt)
 
     R = 1 - npNuclearStain * (1 - 0.24) - npCytosolStain * (1 - 0.88)
     G = 1 - npNuclearStain * (1 - 0.21) - npCytosolStain * (1 - 0.27)
@@ -104,19 +121,18 @@ def Mic2HE(NuclearStain: sitk.Image, CytosolStain: sitk.Image) -> sitk.Image:
     # B = 1 - npNuclearStain*(W_target[2,0]) - npCytosolStain*(W_target[2,1])
 
     img = np.squeeze(
-        np.stack((R[np.newaxis, :, :], G[np.newaxis, :, :], B[np.newaxis, :]), axis=1)
+        np.stack((R[np.newaxis, :, :], G[np.newaxis, :, :], B[np.newaxis, :,:]), axis=1)
     )
 
     img[img < 0] = 0
-
     retImg = sitk.GetImageFromArray(img, isVector=False)
     dir = np.eye(3)
-    olddir = np.array(NuclearStain.GetDirection()).reshape(2, -1)
+    olddir = np.array(Phalloidin.GetDirection()).reshape(2, -1)
     dir[0, :] = list(olddir[0, :]) + [0]
     dir[1, :] = list(olddir[1, :]) + [0]
     retImg.SetDirection(dir.flatten())
-    retImg.SetSpacing(list(NuclearStain.GetSpacing()) + [1])
-    retImg.SetOrigin(list(NuclearStain.GetOrigin()) + [0])
+    retImg.SetSpacing(list(Phalloidin.GetSpacing()) + [1])
+    retImg.SetOrigin(list(Phalloidin.GetOrigin()) + [0])
 
     return retImg
 
@@ -258,6 +274,7 @@ def createComposites(
     phaloidinCuts: list[sitk.Image],
     DAPICuts: list[sitk.Image],
     alphaImgCuts: list[sitk.Image],
+    micScalingFactor,
     outputDir: str,
 ) -> None:
 
@@ -269,7 +286,7 @@ def createComposites(
         phaloidin = normalizeImageRange(phaloidin, msk, range=(0.1, 98))
         DAPI = normalizeImageRange(DAPI, msk)
 
-        HE = Mic2HE(DAPI, phaloidin)
+        HE = Mic2HE(DAPI, phaloidin, micScalingFactor)
 
         sitk.WriteImage(HE, pjoin(outputDir, f"HE_{ix}.tif"))
         sitk.WriteImage(HE, pjoin(outputDir, f"HE_{ix}.nii"))
