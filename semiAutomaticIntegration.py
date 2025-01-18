@@ -35,19 +35,19 @@ micScalingFactor = 1 / 10.
 
 # %% Asking for data location
 
-#fIQID = askdirectory(title="Select iQID listmode directory", initialdir=fAlphaCameraDir)
-fIQID = fAlphaCameraDir
+fIQID = askdirectory(title="Select iQID listmode directory", initialdir=fAlphaCameraDir)
+
 fiQIDData = pjoin(fIQID, "Listmode")
 
-#fMicroscopyFile = askopenfilename(
-#    title="Select Microscopy file", initialdir=fMicroscopyDir
-#)
+fMicroscopyFile = askopenfilename(
+    title="Select Microscopy file", initialdir=fMicroscopyDir
+)
 
-fMicroscopyFile = pjoin(fMicroscopyDir, 'August_13_213Bi_90min3.ndpi')
+
 fSampleName = os.path.basename(os.path.normpath(fMicroscopyFile)).split(".czi")[0]
 
-#fOutputDir = askdirectory(title="Select OUTPUT directory", initialdir=fOutDir)
-fOutputDir = fOutDir
+fOutputDir = askdirectory(title="Select OUTPUT directory", initialdir=fOutDir)
+
 fOutputDir = pjoin(fOutputDir, fSampleName)
 os.makedirs(fOutputDir, exist_ok=True)
 
