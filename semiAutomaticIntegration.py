@@ -102,7 +102,11 @@ os.makedirs(fOutputDir, exist_ok=True)
 iQID = iQIDParser(fiQIDData, listmodeType="Compressed")
 
 alphaImgLowRes = iQID.generatePixelatedImage(
+<<<<<<< HEAD
     imageScalingFactor=alpha_lowres_scaling, decayCorrect=False
+=======
+    imageScalingFactor=alpha_low_res_scaling, decayCorrect=False
+>>>>>>> ec80975821b00c1b8f2f9f69729920f13e12c50b
 )
 alphaImgHiRes = iQID.generatePixelatedImage(imageScalingFactor=alpha_hires_scaling, decayCorrect=True)
 
