@@ -28,7 +28,9 @@ fOutDir = r"C:\Users\nzaid1\OneDrive - Johns Hopkins\Documents\A_Experiments\NZ\
 fAlphaCameraDir = r"C:\Users\nzaid1\OneDrive - Johns Hopkins\Documents\A_Experiments\NZ\Bi213_Aug_2024\August_13_213Bi_90min3"
 
 
-scalingFactor = .25
+alpha_lowres_scaling = .25 # 1 = intrinsic resolution; <1 = higher resolution
+alpha_hires_scaling = .25
+iLevel = 4
 micScalingFactor = 1 / 10.
 
 # %% Asking for data location
@@ -50,7 +52,7 @@ fOutputDir = pjoin(fOutputDir, fSampleName)
 os.makedirs(fOutputDir, exist_ok=True)
 
 try:
-    # %% Loading files
+# Loading files
     micFile = CziFile(fMicroscopyFile)
 
     # Extract physical pixel sizes
@@ -71,7 +73,6 @@ try:
 except RuntimeError: #So this was not a CZI file
     slide = openslide.OpenSlide(fMicroscopyFile)
 
-    iLevel = 4 #resolution
     # Get dimensions
     width, height = slide.level_dimensions[iLevel]
 
@@ -101,9 +102,9 @@ os.makedirs(fOutputDir, exist_ok=True)
 iQID = iQIDParser(fiQIDData, listmodeType="Compressed")
 
 alphaImgLowRes = iQID.generatePixelatedImage(
-    imageScalingFactor=scalingFactor, decayCorrect=False
+    imageScalingFactor=alpha_low_res_scaling, decayCorrect=False
 )
-alphaImgHiRes = iQID.generatePixelatedImage(imageScalingFactor=.25, decayCorrect=True)
+alphaImgHiRes = iQID.generatePixelatedImage(imageScalingFactor=alpha_hires_scaling, decayCorrect=True)
 
 sitk.WriteImage(alphaImgHiRes, pjoin(fOutputDir, "alphaImgHiRes.nii"))
 
