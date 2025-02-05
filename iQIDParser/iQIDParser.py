@@ -61,12 +61,13 @@ class iQIDParser:
     def getScaledDecayNumber(self):
 
         scaledDecayNumber = 0.0
+        self.TotalSecondsMeasuring = 0.0
+        decayRateSeconds = self.lambdaDays * days2seconds
 
         for lmfile in self.parsedListModeFiles:
             timeStamps = lmfile.time
 
             dTime = timeStamps[-1] - timeStamps[0]
-
             if dTime < (5 * 60 * 1000):
                 continue
 
@@ -97,44 +98,35 @@ class iQIDParser:
             startTimeSecondsSinceReference = (
                 startTimes - np.datetime64(self.referenceTime)
             ).astype("timedelta64[s]")
+
             stopTimeSecondsSinceReference = (
                 stopTimes - np.datetime64(self.referenceTime)
             ).astype("timedelta64[s]")
 
-            self.TotalSecondsMeasuring = 0.0
-
-            decayRateSeconds = self.lambdaDays * days2seconds
             # Calculate Weighing fraction
             for iBlock in range(len(startTimes)):
                 scaledDecayNumber += np.exp(
                     -decayRateSeconds
-                    * startTimeSecondsSinceReference[iBlock].astype(int)
+                    * startTimeSecondsSinceReference[iBlock].astype(float)
                 ) - np.exp(
                     -decayRateSeconds
-                    * stopTimeSecondsSinceReference[iBlock].astype(int)
+                    * stopTimeSecondsSinceReference[iBlock].astype(float)
                 )
-
                 self.TotalSecondsMeasuring += stopTimeSecondsSinceReference[
                     iBlock
-                ].astype(int) - startTimeSecondsSinceReference[iBlock].astype(int)
+                ].astype(float) - startTimeSecondsSinceReference[iBlock].astype(float)
 
         return scaledDecayNumber
-
 
     def updateDecayCorrectionScaling(self):
 
         scaledDecayNumber = self.getScaledDecayNumber()
 
-        measurementToActivityFactor = (
-            (self.lambdaDays
-            * days2seconds)
-            / (self.cameraSensitivity * scaledDecayNumber)
+        measurementToActivityFactor = (self.lambdaDays * days2seconds) / (
+            self.cameraSensitivity * scaledDecayNumber
         )
 
-        print(measurementToActivityFactor)
-        
         self.decayCorrectionFactor = measurementToActivityFactor
-
 
     def generatePixelatedImage(
         self,
@@ -151,12 +143,6 @@ class iQIDParser:
         tmp = []
         for lmfile in self.parsedListModeFiles:
 
-            # if minClusterSize is None:
-            #     minClusterSize = 1
-
-            # clusterMark = (lmfile.clusterSize >= minClusterSize)
-
-            # if clusterMark.sum() > 0:
             tmp.append(
                 np.histogram2d(
                     lmfile.rowCentroids,
@@ -169,15 +155,11 @@ class iQIDParser:
                 )[0]
             )
 
-        # tmp = [np.histogram2d(i.rowCentroids, i.columnCentroids, bins=(
-        #     i.numRows * self.imageSizeFactor, i.numColumns * self.imageSizeFactor))[0] for i in self.parsedListModeFiles]
-
         img = np.sum(np.array(tmp), 0).astype(float)
 
         if decayCorrect:
             img *= self.decayCorrectionFactor
 
-        # img = img[::-1,::-1]
         # construct SITK Image
         returnImg = sitk.GetImageFromArray(img)
         returnImg.SetSpacing([i / imageScalingFactor * 1e3 for i in self.imageSpacing])
@@ -186,27 +168,3 @@ class iQIDParser:
             [i / 2.0 for i in returnImg.GetSpacing()]
         )  # Move origin half a pixel so that different resoltuions match
         return returnImg
-
-    def decayCurve(self, polygons: list | None = None, timestep=100000):
-
-        time, nDecays = [], []
-        for a in [self.parsedListModeFiles[-1]]:
-
-            nbins = len(np.arange(a.time[0], a.time[-1], step=timestep))
-
-            timeStamps = a.time[::100]
-            clusterIntensity = a.clusterIntensity[::100]
-
-            points = np.vstack((a.columnCentroids[::100], a.rowCentroids[::100])).T
-            # timeStamps = timeStamps[check_polygon_contains_points(polygons[0], points) * (clusterIntensity < 2000)]
-            timeStamps = timeStamps[(clusterIntensity < 2000)]
-
-            # timeStamps = a.time
-
-            mass, edges = np.histogram(timeStamps, bins=nbins)
-
-            time.extend(edges[:-1])
-            nDecays.extend(mass)
-
-        return time, nDecays
-

@@ -53,16 +53,14 @@ class iQIDListModeFile:
         if npBody.shape[0] <= 1:
             return
 
-        # self.time = npBody[:, 1]
-        self.time = npBody[:, 0] #Acutally frame number
-        frameDuration = np.median(np.diff(self.time))
-        self.time = self.time * frameDuration #A bit more robust than using time directly, which has some itnernal overflow issues...
-        #NOTE: This trick only works if time of dropped frames <<< isotope half life AND drop frames << total acq time
+        self.frameNumber = npBody[:, 0]
+        self.time = npBody[:, 1] #elapsed time in ms
 
         self.clusterIntensity = npBody[:, 2]
         self.clusterSize = npBody[:, 3]
         self.rowCentroids = npBody[:, 4]
         self.columnCentroids = npBody[:, 5]
+        self.eccentricity = npBody[:, 9]
 
         self.acquisitionLength = (self.time[-1] - self.time[0]) * 1e-3  # seconds
 
@@ -106,12 +104,16 @@ class iQIDListModeFile:
         imageData = npBody.reshape((-1, imageBlockSize))
 
         self.filteredImages = imageData[:, imageSize : 2 * imageSize]
+        self.rawImages = imageData[:, :imageSize]
         footerInfo = imageData[:, 2 * imageSize :]
 
         self.rowCentroids = footerInfo[:, 1]
         self.columnCentroids = footerInfo[:, 2]
-        self.clusterIntensity = footerInfo[:, 3]
-        self.time = footerInfo[:, 6]
+        self.totalSignalAboveThreshold = footerInfo[:, 3]
+        self.rawClusterSignalInCroppedSum = footerInfo[:, 4]
+        self.filtClusterSignalInCroppedSum = footerInfo[:, 5]
+
+        self.time = footerInfo[:, 6] #elapsed time since start of acquisition in ms
         self.clusterSize = footerInfo[:, 7]
 
         self.acquisitionLength = (self.time[-1] - self.time[0]) * 1e-3  # seconds
