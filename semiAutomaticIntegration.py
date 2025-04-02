@@ -23,30 +23,42 @@ def rgba2gray(rgba):
 Tk().withdraw()  # we don't want a full GUI, so keep the root window from appearing
 
 fMicroscopyDir = r"C:\Users\remco\Box\Lab Data\Sep 2024\Alpha Camera Slides\After Pap Pen (APP)"
+fMicroscopyDir = r"C:\Users\nzaid1\OneDrive - Johns Hopkins\Documents\A_Experiments\NZ\Bi213_Aug_2024"
 
 fOutDir = r"C:\OUTPUT\iQID Coreg\September 2024"
 fAlphaCameraDir = r"F:\DATA\iQID\September 2024"
+fOutDir = r"C:\Users\nzaid1\OneDrive - Johns Hopkins\Documents\A_Experiments\NZ\Bi213_Aug_2024\New folder"
+fAlphaCameraDir = r"C:\Users\nzaid1\OneDrive - Johns Hopkins\Documents\A_Experiments\NZ\Bi213_Aug_2024\August_13_213Bi_90min3"
 
 
 scalingFactor = 1
+alpha_lowres_scaling = .25 # 1 = intrinsic resolution; <1 = higher resolution
+alpha_hires_scaling = .25
+iLevel = 4
 micScalingFactor = 1 / 10.
 
 # %% Asking for data location
 
 fIQID = askdirectory(title="Select iQID listmode directory", initialdir=fAlphaCameraDir)
 # fIQID = r'F:\DATA\iQID\September 2024\September 2024 Timepoint 2 Set 2 Complete'
+
 fiQIDData = pjoin(fIQID, "Listmode")
 
 fMicroscopyFile = askopenfilename(
     title="Select Microscopy file", initialdir=fMicroscopyDir
 )
 # fMicroscopyFile = r'F:\DATA\Slide Scanner\Sep 2024\Alpha Camera Slides\After Pap Pen (APP)\Timepoint 2 Set 2\03_T2_063_RTum_7_9_11_AlphaCamera_Phalloidin_Hoechst_10X.czi'
+
+
 fSampleName = os.path.basename(os.path.normpath(fMicroscopyFile)).split(".czi")[0]
 
 # fOutputDir = askdirectory(title="Select OUTPUT directory", initialdir=fOutDir)
 fOutputDir = r'c:\OUTPUT\iQID Coreg\September 2024\Kidneys'
 # fOutputDir = r'c:\OUTPUT\iQID Coreg\September 2024\6H-048-Kidney-7-9-11'
 fOutputDir = pjoin(fOutputDir, fSampleName)# + '_without_warping_corr')
+fOutputDir = askdirectory(title="Select OUTPUT directory", initialdir=fOutDir)
+
+fOutputDir = pjoin(fOutputDir, fSampleName)
 os.makedirs(fOutputDir, exist_ok=True)
 
 try:
@@ -71,10 +83,27 @@ try:
 except RuntimeError: #So this was not a CZI file
     slide = openslide.OpenSlide(fMicroscopyFile)
 
-correctionTrans = [
-    sitk.ReadParameterFile(rf"C:\OUTPUT\iQID Coreg\TransRectifyMeasurement_{ixs}.txt")
-    for ixs in range(5)
-]  
+    # Get dimensions
+    width, height = slide.level_dimensions[iLevel]
+
+    spacing_at_level0 = float(slide.properties.get('openslide.mpp-x')), float(slide.properties.get('openslide.mpp-y'))
+
+    spacing = [i * slide.level_downsamples[iLevel] for i in spacing_at_level0]
+
+    # Read a region at a specific level
+    img = rgba2gray(np.array(slide.read_region((0, 0), iLevel, (width, height)))) #this is in RGBA, let's convert to grey scale
+    
+    #SITK image by adding spatial info
+    DAPI = sitk.GetImageFromArray(img)
+    DAPI.SetSpacing(spacing)
+    DAPI = sitk.InvertIntensity(DAPI)
+
+    Phalloidin = DAPI
+
+#correctionTrans = [
+#    sitk.ReadParameterFile(rf"C:\OUTPUT\iQID Coreg\TransRectifyMeasurement_{ixs}.txt")
+#    for ixs in range(5)
+#]  # TODO: fix this for our camera
 
 correction_Jac = sitk.ReadImage(r'C:\OUTPUT\iQID Coreg\TransRectifyMeasurement_Jac.nii')
 
@@ -88,6 +117,11 @@ iQID = iQIDParser(fiQIDData, listmodeType="Compressed")
 ###########################
 
 alphaImgHiRes = iQID.generatePixelatedImage(imageScalingFactor=2, decayCorrect=True)
+alphaImgLowRes = iQID.generatePixelatedImage(
+    imageScalingFactor=alpha_lowres_scaling, decayCorrect=False
+)
+alphaImgHiRes = iQID.generatePixelatedImage(imageScalingFactor=alpha_hires_scaling, decayCorrect=True)
+
 sitk.WriteImage(alphaImgHiRes, pjoin(fOutputDir, "alphaImgHiRes.nii"))
 
 #for ix in range(len(correctionTrans)):
