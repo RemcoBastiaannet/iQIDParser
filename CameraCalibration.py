@@ -1,4 +1,5 @@
 # %%
+from mplSettings import *
 from tkinter import Tk  # from tkinter import Tk for Python 3.x
 from tkinter.filedialog import askopenfilename, askdirectory
 from tkinter.simpledialog import askstring
@@ -21,6 +22,7 @@ import pickle
 
 import matplotlib.pyplot as plt
 from datetime import datetime
+
 
 Tk().withdraw()  # we don't want a full GUI, so keep the root window from appearing
 uci2bq = 37000
@@ -86,7 +88,7 @@ alphaImg = sitk.ReadImage(pjoin(fData, "CalibrationImg.nii"))
 # alphaImg = sitk.Median(alphaImg, (3, 3, 1))
 sitk.WriteImage(sitk.Log10(alphaImg), pjoin(fData, "LogCalibrationImg.nii"))
 # masks = sitk.ReadImage(pjoin(fData, "Smaller dots.seg.nrrd"))
-masks = sitk.ReadImage(pjoin(fData, "Segmentation.seg.nrrd"))
+masks = sitk.ReadImage(pjoin(fData, "Segmentation2.seg.nrrd"))
 npMasks = np.squeeze(sitk.GetArrayFromImage(masks))
 masks2 = sitk.GetImageFromArray(npMasks)
 masks2.SetSpacing(masks.GetSpacing()[:2])
@@ -126,13 +128,27 @@ R2 = getR2(acts_accept, counts, *poptCalibration)
 
 
 x = np.linspace(0, acts_accept.max(), 100)
-plt.figure()
-plt.loglog(x, f(x, *poptCalibration))
+#%%
+plt.figure(figsize=(6,6))
+plt.loglog(x, f(x, *poptCalibration), color = 'gray')
 for i in range(len(acts_accept)):
-    plt.scatter(acts_accept[i], counts[i], label=f"{acts_accept[i]}")
+    plt.scatter(acts_accept[i], counts[i], label=f"{acts_accept[i]}", color = 'k')
 
-plt.legend()
-plt.show()
+ax = plt.gca()
+# Get the axis limits
+xlim = ax.get_xlim()  # Get x-axis limits
+ylim = ax.get_ylim()  # Get y-axis limits
+
+# Find the bottom-right corner location
+x = xlim[1]  # Rightmost x-coordinate
+y = ylim[0]  # Bottommost y-coordinate
+
+ax.text(x, y+.01, f'$R^2$ {R2:.3}', ha='right', va='bottom', fontsize=9)
+ax.text(x, y, f'Detector efficiency 88.5%', ha='right', va='bottom', fontsize=9)
+
+plt.xlabel('Calibrated activity [Bq]')
+plt.ylabel('iQID measured activity [Bq]')
+plt.savefig("__GenPlotsForPaper/CalibrationCurve.png", dpi=600)
 
 
 

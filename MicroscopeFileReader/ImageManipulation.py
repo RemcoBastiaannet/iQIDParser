@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 import fill_voids
 from skimage.exposure import equalize_adapthist, rescale_intensity
 import matplotlib.ticker as tkr
+from skimage import color
+
+
 # color norm. standard (from TCGA-A2-A3XS-DX1, Amgad et al, 2019)
 cnorm = {
     "mu": np.array([8.74108109, -0.12440419, 0.0444982]),
@@ -269,6 +272,18 @@ def createComposites(
     ):
 
         HE = Mic2HE(DAPI, phaloidin)
+        # HE = Mic2HE(phaloidin, phaloidin)
+
+        # npGrayHE = color.rgb2gray(sitk.GetArrayFromImage(HE).T)
+        # npGrayHE = sitk.GetArrayFromImage(HE).T
+
+        # HEnew = sitk.GetImageFromArray(npGrayHE.T)
+
+        # HEnew.SetSpacing(list(HE.GetSpacing()))
+        # HEnew.SetOrigin(list(HE.GetOrigin()))
+
+        # HE = HEnew
+
 
         sitk.WriteImage(HE, pjoin(outputDir, f"HE_{ix}.tif"))
         sitk.WriteImage(HE, pjoin(outputDir, f"HE_{ix}.nii"))
@@ -286,10 +301,14 @@ def createComposites(
         fig.set_size_inches((10, 10))
         plt.axis("off")
         im = ax.imshow(npHE, cmap = 'Grays')
-        levels = np.linspace(np.percentile(npAlphaImg, 50), np.percentile(npAlphaImg, 98), 25)
-        CS = ax.contourf(npAlphaImg, levels, linewidths=0.1, alpha = 0.2, cmap='jet')
+        # levels = np.linspace(np.percentile(npAlphaImg, 50), np.percentile(npAlphaImg, 98), 25)
+        # CS = ax.contourf(npAlphaImg, levels, linewidths=0.1, alpha = 0.2, cmap='jet')
+        mn, mx = np.percentile(npAlphaImg, (50, 95))
+        alphaMP = np.ones_like(npAlphaImg) * .3
+        alphaMP[npAlphaImg < mn] = 0
+        CS = ax.imshow(npAlphaImg, vmin = np.percentile(npAlphaImg, 30), vmax = np.percentile(npAlphaImg, 95), alpha = alphaMP, cmap = 'jet' )
 
-        CB = fig.colorbar(CS, shrink=0.4, format=tkr.FormatStrFormatter('%.2g'), pad=0.03)
+        CB = fig.colorbar(CS, shrink=0.8, format=tkr.FormatStrFormatter('%.2g'), pad=0.03)
         l, b, w, h = ax.get_position().bounds
         ll, bb, ww, hh = CB.ax.get_position().bounds
         CB.ax.set_position([ll, b + 0.1 * h, ww, h * 0.8])
@@ -297,17 +316,44 @@ def createComposites(
         plt.tight_layout()
         plt.savefig(pjoin(outputDir, f"_Contours_{ix}.tif"), dpi=600)
 
-        plt.figure(figsize=(10, 10))
-        plt.axis("off")
-        npAlphaImg -= npAlphaImg.min()
-        npAlphaImg /= np.percentile(npAlphaImg, 99.9)
-        rgbAlphaImg = plt.cm.inferno(np.log(npAlphaImg + 1)).astype(np.float32)
-        mixedPic = rgbAlphaImg[:, :, :3] * 1 + npHE.astype(np.float32) * 0.7
 
-        plt.imshow(mixedPic, interpolation=None)
-        plt.savefig(pjoin(outputDir, f"_Overlay_{ix}.tif"), dpi=600)
-
-        plt.figure(figsize=(10, 10))
+        fig, ax = plt.subplots()
+        fig.set_size_inches((10, 10))
         plt.axis("off")
-        plt.imshow(npHE, interpolation=None)
-        plt.savefig(pjoin(outputDir, f"_HE_{ix}.tif"), dpi=600)
+        im = ax.imshow(npHE, cmap = 'Grays')
+        # levels = np.linspace(np.percentile(npAlphaImg, 50), np.percentile(npAlphaImg, 98), 25)
+        # CS = ax.contourf(npAlphaImg, levels, linewidths=0.1, alpha = 0.2, cmap='jet')
+        mn, mx = np.percentile(npAlphaImg, (85, 99))
+        alphaMP = np.ones_like(npAlphaImg) * .3
+        alphaMP[npAlphaImg < mn] = 0
+        CS = ax.imshow(npAlphaImg, vmin = mn, vmax = mx, alpha = alphaMP, cmap = 'jet' )
+
+        CB = fig.colorbar(CS, shrink=0.8, format=tkr.FormatStrFormatter('%.2g'), pad=0.03)
+        l, b, w, h = ax.get_position().bounds
+        ll, bb, ww, hh = CB.ax.get_position().bounds
+        CB.ax.set_position([ll, b + 0.1 * h, ww, h * 0.8])
+        CB.set_label('Activity [Bq]', rotation=270, labelpad=15 )
+        plt.tight_layout()
+        plt.savefig(pjoin(outputDir, f"_Contours_HiAct_{ix}.tif"), dpi=600)
+
+
+
+        plt.figure(figsize=(10,10))
+        plt.axis("off")
+        plt.imshow(npHE)
+        plt.savefig(pjoin(outputDir, f"RegularHE{ix}.tif"), dpi=600)
+
+        # plt.figure(figsize=(10, 10))
+        # plt.axis("off")
+        # npAlphaImg -= npAlphaImg.min()
+        # npAlphaImg /= np.percentile(npAlphaImg, 99.9)
+        # rgbAlphaImg = plt.cm.inferno(np.log(npAlphaImg + 1)).astype(np.float32)
+        # mixedPic = rgbAlphaImg[:, :, :3] * 1 + npHE.astype(np.float32) * 0.7
+
+        # plt.imshow(mixedPic, interpolation=None)
+        # plt.savefig(pjoin(outputDir, f"_Overlay_{ix}.tif"), dpi=600)
+
+        # plt.figure(figsize=(10, 10))
+        # plt.axis("off")
+        # plt.imshow(npHE, interpolation=None)
+        # plt.savefig(pjoin(outputDir, f"_HE_{ix}.tif"), dpi=600)

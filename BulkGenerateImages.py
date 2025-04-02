@@ -19,6 +19,7 @@ from MicroscopeFileReader import ImageManipulation
 import pickle
 
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 Tk().withdraw()  # we don't want a full GUI, so keep the root window from appearing
 
@@ -43,5 +44,9 @@ for iFile in os.listdir(fIQIDDataFolder):
         alphaImg = sitk.Cast(alphaImg, sitk.sitkFloat32)
         #Write Image to containing data folder
         sitk.WriteImage(alphaImg, pjoin(fIQIDDataFolder, iFile, 'AlphaImg.tiff'))
+        sitk.WriteImage(sitk.Log(alphaImg+1), pjoin(fIQIDDataFolder, iFile, 'AlphaImg_log.tiff'))
+
+
+
     except:
         print( f"Failed at {iFile}" )

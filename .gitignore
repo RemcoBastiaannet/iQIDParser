@@ -5,3 +5,6 @@
 
 *.pyc
 *.pic
+*.npy
+
+__GenPlotsForPaper/*

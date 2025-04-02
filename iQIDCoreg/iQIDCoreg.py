@@ -7,7 +7,7 @@ import matplotlib
 matplotlib.use('QtAgg')
 import matplotlib.pyplot as plt
 import pickle
-
+import copy
 
 def correctResolutionTransform(transforms: list, moving: sitk.Image):
 
@@ -112,7 +112,7 @@ def matchPointClouds(coords: list[list], alphaImg: sitk.Image, MicImg: sitk.Imag
     PhysicalPointsMic = np.array(
         [i * MicImg.GetSpacing() for i in pointsMic]).T
 
-    p1 = PhysicalPointsAlpha
+    p1 = PhysicalPointsAlpha #moving img
     p2 = PhysicalPointsMic
     # Calculate centroids
     # If you don't put reshape then the outcome is 1D with no rows/colums and is interpeted as rowvector in next minus operation, while it should be a column vector
@@ -141,7 +141,7 @@ def matchPointClouds(coords: list[list], alphaImg: sitk.Image, MicImg: sitk.Imag
     result = T + np.matmul(R, p1)
 
     # Calculate new direction matrix and origin
-    alpha2 = alphaImg
+    alpha2 = copy.copy(alphaImg)
     alpha2.SetDirection(R.flatten())
     alpha2.SetOrigin([i for i in T.flatten()])
 
@@ -150,27 +150,27 @@ def matchPointClouds(coords: list[list], alphaImg: sitk.Image, MicImg: sitk.Imag
 def coregAlphaCameraImgToMicImg(DAPIImg: sitk.Image, phalloidinImg: sitk.Image, micImg: sitk.Image):
     parMap = sitk.GetDefaultParameterMap("rigid")
     parMap['AutomaticTransformInitialization'] = ('false',)
-    # parMap['Transform'] = ('SimilarityTransform',)
+    parMap['Transform'] = ('SimilarityTransform',)
     # parMap['ImageSampler'] = ('RandomSparseMask',)
     parMap['MaximumNumberOfIterations'] = ("2580",)
-    parMap['NumberOfResolutions'] = ('1',)
-    parMap['Metric'] = ('AdvancedNormalizedCorrelation',)
+    # parMap['NumberOfResolutions'] = ('1',)
+    # parMap['Metric'] = ('AdvancedNormalizedCorrelation',)
 
     # parMap['NumberOfSpatialSamples'] = (
-    #     str(int(np.prod(micImg.GetSize()) * 0.005)),)
-    # parMap['ASGDParameterEstimationMethod'] = ("DisplacementDistribution",)
+    #     str(int(np.prod(phalloidinImg.GetSize()) * 0.1)),)
+    parMap['ASGDParameterEstimationMethod'] = ("DisplacementDistribution",)
 
 
     parMap2 = sitk.GetDefaultParameterMap("rigid")
     # parMap2['Transform'] = ('SimilarityTransform',)
     parMap2['Transform'] = ('SimilarityTransform',)
-    parMap2['Metric'] = ('AdvancedNormalizedCorrelation',)
+    # parMap2['Metric'] = ('AdvancedNormalizedCorrelation',)
     parMap2['AutomaticTransformInitialization'] = ('false',)
     # parMap2['ImageSampler'] = ('RandomSparseMask',)
-    parMap2['NumberOfResolutions'] = ('1',)
-    # parMap2['ASGDParameterEstimationMethod'] = ("DisplacementDistribution",)
-    parMap2['NumberOfSpatialSamples'] = (
-        str(int(np.prod(phalloidinImg.GetSize()) * 0.10)),)
+    # parMap2['NumberOfResolutions'] = ('1',)
+    parMap2['ASGDParameterEstimationMethod'] = ("DisplacementDistribution",)
+    # parMap2['NumberOfSpatialSamples'] = (
+    #     str(int(np.prod(phalloidinImg.GetSize()) * 0.10)),)
     parMap2['MaximumNumberOfIterations'] = ("4000",)
     # parMap2['CheckNumberOfSamples'] = ('false',)
 
@@ -251,19 +251,19 @@ def coregAlphaCameraImgToMicImg(DAPIImg: sitk.Image, phalloidinImg: sitk.Image, 
 
     newTransforms = correctResolutionTransform(transforms, DAPIImg)
 
-    alphaImgTrans = sitk.Transformix(phalloidinImg, newTransforms)
-    alphaImg2Trans = sitk.Transformix(DAPIImg, newTransforms)
+    alphaImgTrans = sitk.Transformix(DAPIImg, newTransforms)
+    alphaImg2Trans = sitk.Transformix(phalloidinImg, newTransforms)
     return alphaImgTrans, alphaImg2Trans
 
 
 def anatomicalCoreg(fixed: sitk.Image, moving: sitk.Image) -> tuple[sitk.Image, sitk.ParameterMap]:
-    parMap = sitk.GetDefaultParameterMap("translation")
+    # parMap = sitk.GetDefaultParameterMap("translation")
     # parMap['AutomaticTransformInitialization'] = ('false',)
     # parMap['ImageSampler'] = ('RandomSparseMask',)
 
     parMap2 = sitk.GetDefaultParameterMap("rigid")
-    parMap2['AutomaticTransformInitialization'] = ('true',)
-    parMap2['AutomaticTransformInitializationMethod'] = ("CenterOfMass",)
+    # parMap2['AutomaticTransformInitialization'] = ('true',)
+    # parMap2['AutomaticTransformInitializationMethod'] = ("CenterOfMass",)
     parMap2['ASGDParameterEstimationMethod'] = ("DisplacementDistribution",)
     # parMap2['ImageSampler'] = ('RandomSparseMask',)
     parMap2['MaximumNumberOfIterations'] = ("500",)

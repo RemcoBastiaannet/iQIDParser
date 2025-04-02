@@ -13,10 +13,11 @@ import pickle
 import copy
 import matplotlib.ticker as tkr
 from skimage import filters
+from mplSettings import *
 
-fMainDir = r'C:\OUTPUT\iQID Coreg\September 2024'
-fSample = r'T4_RTum_040'
-fSamples = ['T4_RTum_040', 'T4_LTum_098', 'T5_LTum_045', 'T5_RTum_045', 'T5_LTum_039', 'T3_LTum_041', 'T3_LKid_035', 'T2_RTum_064', 'T2_RTum_075', 'T3_LTum_031', 'T3_LTum_035', 'T2_RTum_063', 'T3_LKid_031', 'T4_RTum_034']
+fMainDir = r'C:\OUTPUT\iQID Coreg\September 2024\Kidneys'
+
+fSamples = ['T3_LTum_041_7_9_11']
 
 LambdaAcDays = np.log(2)/9.9
 LambdaAcSeconds = LambdaAcDays / (24*60*60)
@@ -149,18 +150,33 @@ def getCorrespondingSections(micImages: list[sitk.Image], numSectionsPerSlide=3)
 
     return coords
 
-def get_cDVH(npAlphaImg: np.ndarray, npHE: np.ndarray, max_dose: float = 4.):
+
+def getTissueMask(HEKidney: sitk.Image) -> sitk.Image:
+    # label_map = sitk.OtsuMultipleThresholds(HEKidney, 2, 0, 256, True)
+    # tissueMask = label_map !=4
+    tissueMask = HEKidney < .95
+    tissueMask = sitk.BinaryFillhole(tissueMask, fullyConnected=True)
+    return tissueMask
+
+
+def get_cDVH(npAlphaImg: np.ndarray, npHE: np.ndarray, max_dose: float = 4., normalize = True):
     #Get Tissue mask
-    blurred_image = filters.gaussian(npHE, sigma = 10)
-    tissue_thresh = filters.threshold_otsu(blurred_image)
-    msk = blurred_image < tissue_thresh
+    
+    # blurred_image = filters.gaussian(npHE, sigma = 10)
+    # tissue_thresh = filters.threshold_otsu(blurred_image)
+    # msk = blurred_image < tissue_thresh
+    msk = sitk.GetArrayFromImage(getTissueMask(sitk.GetImageFromArray(npHE)))
 
     #Construct cDVH
-    doseRateVals = npAlphaImg[msk].flatten()
-    xDoses = np.linspace(0, max_dose, 1000)
+    doseRateVals = npAlphaImg[msk!=0].flatten()
+    xDoses = np.linspace(0, max_dose, 100)
     cDVH = np.zeros_like(xDoses)
+
+    norm_fac = 1
+    if normalize: norm_fac = len(doseRateVals)
+
     for ix in range(len(xDoses)):
-        cDVH[ix] = np.sum( doseRateVals >= xDoses[ix] ) / len(doseRateVals)
+        cDVH[ix] = np.sum( doseRateVals >= xDoses[ix] ) / norm_fac
 
     return xDoses, cDVH
 
@@ -429,9 +445,6 @@ if __name__ == '__main__':
     dirs = [pjoin(fMainDir, i) for i in fSamples]
     for fDataDir in dirs:
 
-        if os.path.isfile(pjoin(fDataDir, 'DoseRateMap_basedon_activityRecon.nii')): continue 
-
-
         try:
             alphaCameraSlides, HESlides = grabSlides(fDataDir)
         except TypeError:
@@ -515,73 +528,98 @@ if __name__ == '__main__':
         npAlphaImg *= 1E3 #Gy/s to milliGy/s
         npAlphaImg *= (60*60) #cGy/h
         npHE[npHE < 1E-4] = 1 #small fix from resampling and image intensity inversion
+#%%
+        fig, ax = plt.subplots(1,2,figsize=(16,8))
+        ax[0].axis("off")
+        ax[0].imshow(npHE, cmap = 'Grays')
+        
+        mn, mx = np.percentile(npAlphaImg, (50, 95))
+        alphaMP = np.ones_like(npAlphaImg) * .3
+        alphaMP[npAlphaImg < mn] = 0
+        CS = ax[0].imshow(npAlphaImg, vmin = np.percentile(npAlphaImg, 30), vmax = np.percentile(npAlphaImg, 95), alpha = alphaMP, cmap = 'jet' )
 
-        fig, ax = plt.subplots()
-        fig.set_size_inches((10, 10))
-        plt.axis("off")
-        im = ax.imshow(npHE, cmap = 'Grays')
-        # levels = np.linspace(npAlphaImg.min(), np.percentile(npAlphaImg, 99.999), 5)
-        levels = np.linspace(np.percentile(npAlphaImg, 35), npAlphaImg.max(), 10)
-        CS = ax.contourf(npAlphaImg, levels, linewidths=0.1, alpha = 0.2, cmap='jet')
+        # Add a size marker
+        scale_bar_length = 1000. / centralHESlice.GetSpacing()[1]  # n pixels per 1 mm
+        side_offset = 20
+        offset = npHE.shape[0] - (scale_bar_length+side_offset)
+        ax[0].plot([2*side_offset, 2*side_offset + scale_bar_length], [npHE.shape[0] - 2*side_offset, npHE.shape[0] - 2*side_offset], color='white', lw=4)
+        ax[0].text(side_offset + .5*scale_bar_length, npHE.shape[0] - 2*side_offset-side_offset, '1 mm', color='white', va='bottom', horizontalalignment = 'center')
 
-        CB = fig.colorbar(CS, shrink=0.4, format=tkr.FormatStrFormatter('%.2g'), pad=0.03)
-        l, b, w, h = ax.get_position().bounds
+        CB = plt.colorbar(ax = ax[0], mappable=CS, shrink=0.6, format=tkr.FormatStrFormatter('%.2g'), pad=0.03)        
+        CB.solids.set(alpha=1)
+        l, b, w, h = ax[0].get_position().bounds
         ll, bb, ww, hh = CB.ax.get_position().bounds
         CB.ax.set_position([ll, b + 0.1 * h, ww, h * 0.8])
         CB.set_label('Dose rate [mGy/hour]', rotation=270, labelpad=15 )
-        plt.tight_layout()
-        plt.savefig(pjoin(fDataDir, f"DoseRate_Contours.tif"), dpi=600)
-#### Do cDVHs
-        xDoses_anatomy, cDVH_anatomy = get_cDVH(npAlphaImg, npHE, 4.)
+       
+        maxDose = npAlphaImg.max()
+        xDoses, cDVH_activity = get_cDVH(npAlphaImg, npHE, maxDose)
+
+        ax[1].plot(xDoses, cDVH_activity*100., color = 'k', linewidth = 2)
+        ax[1].set_ylim([0, 100])
+        ax[1].set_xlim([0, maxDose])
+        ax[1].set_xlabel('Dose Rate [mGy/h]')
+        ax[1].set_ylabel('Relative volume [%]')
+
+        # Adjust the height of the plot in ax[1] to match the height of the image in ax[0]
+        pos1 = ax[0].get_position()  # get the original position 
+        pos2 = ax[1].get_position()  # get the original position 
+        ax[1].set_position([pos2.x0, pos1.y0, pos2.width, pos1.height])  # set a new position
+  
+        
+        ax[0].text(-0.0, 1.05, 'A', transform=ax[0].transAxes, fontsize=16, fontweight='bold', va='top', ha='right')
+        ax[1].text(-0.1, 1.05, 'B', transform=ax[1].transAxes, fontsize=16, fontweight='bold', va='top', ha='right')
+        
+        plt.savefig(pjoin(fDataDir, f"DoseRateMapAndcDVH.png"), dpi=600)
+        plt.savefig(pjoin(fDataDir, f"DoseRateMapAndcDVH.eps"), dpi=600)
+
+# %%
+
+#%%
+
+
+# #### Do cDVHs
+#         xDoses_anatomy, cDVH_anatomy = get_cDVH(npAlphaImg, npHE, .5)
         
 
 
 ##############
 
-        alphaImg = sitk.Resample(doseRateMapAcitity, centralHESlice, sitk.Transform(), sitk.sitkLinear)
-        # sitk.WriteImage(alphaImg, pjoin(outputDir, f'alphaImgOverlay_{ix}.nii'))
+        # alphaImg = sitk.Resample(doseRateMapAcitity, centralHESlice, sitk.Transform(), sitk.sitkLinear)
+        # # sitk.WriteImage(alphaImg, pjoin(outputDir, f'alphaImgOverlay_{ix}.nii'))
 
-        # Plot with contours [cut outs]
-        npAlphaImg = sitk.GetArrayFromImage(alphaImg)
-        npAlphaImg[npAlphaImg <=0] = 0
+        # # Plot with contours [cut outs]
+        # npAlphaImg = sitk.GetArrayFromImage(alphaImg)
+        # npAlphaImg[npAlphaImg <=0] = 0
 
-        npAlphaImg /= npAlphaImg.sum()
-        npAlphaImg *= sitk.GetArrayViewFromImage(doseRateMapAcitity).sum()
+        # npAlphaImg /= npAlphaImg.sum()
+        # npAlphaImg *= sitk.GetArrayViewFromImage(doseRateMapAcitity).sum()
 
-        npAlphaImg *= 1E3 #Gy/s to milliGy/s
-        npAlphaImg *= (60*60) #cGy/h
-        npHE[npHE < 1E-4] = 1 #small fix from resampling and image intensity inversion
+        # npAlphaImg *= 1E3 #Gy/s to milliGy/s
+        # npAlphaImg *= (60*60) #cGy/h
+        # npHE[npHE < 1E-4] = 1 #small fix from resampling and image intensity inversion
 
-        fig, ax = plt.subplots()
-        fig.set_size_inches((10, 10))
-        plt.axis("off")
-        im = ax.imshow(npHE, cmap = 'Grays')
-        # levels = np.linspace(npAlphaImg.min(), np.percentile(npAlphaImg, 99.999), 5)
-        levels = np.linspace(np.percentile(npAlphaImg, 35), npAlphaImg.max(), 10)
-        CS = ax.contourf(npAlphaImg, levels, linewidths=0.1, alpha = 0.2, cmap='jet')
+        # fig, ax = plt.subplots()
+        # fig.set_size_inches((10, 10))
+        # plt.axis("off")
+        # im = ax.imshow(npHE, cmap = 'Grays')
+        # # levels = np.linspace(npAlphaImg.min(), np.percentile(npAlphaImg, 99.999), 5)
+        # levels = np.linspace(np.percentile(npAlphaImg, 50), np.percentile(npAlphaImg, 98), 25)
+        # CS = ax.contourf(npAlphaImg, levels, linewidths=0.1, alpha = 0.2, cmap='jet')
 
-        CB = fig.colorbar(CS, shrink=0.4, format=tkr.FormatStrFormatter('%.2g'), pad=0.03)
-        l, b, w, h = ax.get_position().bounds
-        ll, bb, ww, hh = CB.ax.get_position().bounds
-        CB.ax.set_position([ll, b + 0.1 * h, ww, h * 0.8])
-        CB.set_label('Dose rate [mGy/hour]', rotation=270, labelpad=15 )
-        plt.tight_layout()
-        plt.savefig(pjoin(fDataDir, f"DoseRate_Contours_Activity_only.tif"), dpi=600)
+        # CB = fig.colorbar(CS, shrink=0.4, format=tkr.FormatStrFormatter('%.2g'), pad=0.03)
+        # l, b, w, h = ax.get_position().bounds
+        # ll, bb, ww, hh = CB.ax.get_position().bounds
+        # CB.ax.set_position([ll, b + 0.1 * h, ww, h * 0.8])
+        # CB.set_label('Dose rate [mGy/hour]', rotation=270, labelpad=15 )
+        # plt.tight_layout()
+        # plt.savefig(pjoin(fDataDir, f"DoseRate_Contours_Activity_only.tif"), dpi=600)
 
 #### Do DVHs
-        xDoses, cDVH_activity = get_cDVH(npAlphaImg, npHE, 4.)
 
 
-        plt.figure()
-        plt.plot(xDoses_anatomy, cDVH_anatomy, label = 'Anatomy-based stacking')
-        plt.plot(xDoses, cDVH_activity, label = 'Activity-based stacking')
-        plt.xlabel('Dose Rate [mGy/h]')
-        plt.ylabel('Relative volume [%]')
-        plt.legend()
-        plt.savefig(pjoin(fDataDir, f"cDVHDiff.png"), dpi=600)
 
-
-        with open(pjoin(fDataDir, 'cDVH_dump'), 'wb') as f:
-            pickle.dump((xDoses, cDVH_anatomy, cDVH_activity), f)
+#         with open(pjoin(fDataDir, 'cDVH_dump'), 'wb') as f:
+#             pickle.dump((xDoses, cDVH_anatomy, cDVH_activity), f)
 
 # %%

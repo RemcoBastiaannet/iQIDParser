@@ -65,8 +65,15 @@ class iQIDListModeFile:
         self.acquisitionLength = (self.time[-1] - self.time[0]) * 1e-3  # seconds
 
         # EndOfAcq
-
-        self.endOfAcq = self.fileStartDate + timedelta(seconds=self.acquisitionLength)
+        try:
+            self.endOfAcq = self.fileStartDate + timedelta(seconds=self.acquisitionLength)
+        except OverflowError: #time index is overflown
+            self.time = npBody[:, 0] #Acutally frame number
+            frameDuration = np.median(np.diff(self.time))
+            self.time = self.time * frameDuration #A bit more robust than using time directly, which has some itnernal overflow issues...
+            #NOTE: This trick only works if time of dropped frames <<< isotope half life AND drop frames << total acq time
+            self.acquisitionLength = (self.time[-1] - self.time[0]) * 1e-3  # seconds
+            self.endOfAcq = self.fileStartDate + timedelta(seconds=self.acquisitionLength)
 
     def __readCropped(self, fFile):
 

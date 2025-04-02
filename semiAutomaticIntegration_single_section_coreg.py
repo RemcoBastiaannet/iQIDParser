@@ -18,31 +18,21 @@ from aicspylibczi import CziFile
 
 Tk().withdraw()  # we don't want a full GUI, so keep the root window from appearing
 
-fMicroscopyDir = r"C:\Users\remco\Box\Lab Data\Sep 2024\Alpha Camera Slides\After Pap Pen (APP)"
+fMicroscopyDir = r"C:\Users\remco\Box\Lab Data\Sep 2024\Alpha Camera Slides"
 
-fOutDir = r"C:\OUTPUT\iQID Coreg\September 2024"
+fOutputDir = r'c:\OUTPUT\iQID Coreg\September 2024'
 fAlphaCameraDir = r"F:\DATA\iQID\September 2024"
-
-
+fSampleName = r'T2_RTum_064_13_15_17'
+# fMicroscopyFile = r'C:\OUTPUT\iQID Coreg\September 2024\T3_LTum_031singleSectionMatch_section3\T3_LTum_031_7_9_11-Scene-3-ScanRegion2.czi'
+fMicroscopyFile = r'C:\OUTPUT\iQID Coreg\September 2024\T2_RTum_064_13_15_17_SingleMatchingSection\01_T2_064_RTum_13_15_17_AlphaCamera_Phalloidin_Hoechst_10X-Scene-1-ScanRegion0.czi'
 scalingFactor = 1
 micScalingFactor = 1 / 10.
 
 # %% Asking for data location
 
-fIQID = askdirectory(title="Select iQID listmode directory", initialdir=fAlphaCameraDir)
-# fIQID = r'F:\DATA\iQID\September 2024\September 2024 Timepoint 2 Set 2 Complete'
-fiQIDData = pjoin(fIQID, "Listmode")
 
-fMicroscopyFile = askopenfilename(
-    title="Select Microscopy file", initialdir=fMicroscopyDir
-)
-# fMicroscopyFile = r'F:\DATA\Slide Scanner\Sep 2024\Alpha Camera Slides\After Pap Pen (APP)\Timepoint 2 Set 2\03_T2_063_RTum_7_9_11_AlphaCamera_Phalloidin_Hoechst_10X.czi'
-fSampleName = os.path.basename(os.path.normpath(fMicroscopyFile)).split(".czi")[0]
-
-# fOutputDir = askdirectory(title="Select OUTPUT directory", initialdir=fOutDir)
-fOutputDir = r'c:\OUTPUT\iQID Coreg\September 2024\Kidneys'
 # fOutputDir = r'c:\OUTPUT\iQID Coreg\September 2024\6H-048-Kidney-7-9-11'
-fOutputDir = pjoin(fOutputDir, fSampleName)# + '_without_warping_corr')
+fOutputDir = pjoin(fOutputDir, fSampleName+'singleSectionMatch_section3')# + '_without_warping_corr')
 os.makedirs(fOutputDir, exist_ok=True)
 
 # %% Loading files
@@ -74,54 +64,19 @@ correction_Jac = sitk.ReadImage(r'C:\OUTPUT\iQID Coreg\TransRectifyMeasurement_J
 
 os.makedirs(fOutputDir, exist_ok=True)
 
-iQID = iQIDParser(fiQIDData, listmodeType="Compressed")
 
 ###########################
 ## Generate Alpha Hi res ##
 ###########################
 
-alphaImgHiRes = iQID.generatePixelatedImage(imageScalingFactor=2, decayCorrect=True)
+alphaImgHiRes = sitk.ReadImage(r'C:\OUTPUT\iQID Coreg\September 2024\T2_RTum_064_13_15_17\alphaImgHiRes2_cor.nii')
 sitk.WriteImage(alphaImgHiRes, pjoin(fOutputDir, "alphaImgHiRes.nii"))
-
-for ix in range(len(correctionTrans)):
-    locSpacing = [float(i) for i in correctionTrans[ix]["Spacing"]]
-    correctionTrans[ix]["Spacing"] = [str(i) for i in alphaImgHiRes.GetSpacing()]
-
-    sizeFac = [
-        float(locSpacing[ix] / float(correctionTrans[ix]["Spacing"][ix]))
-        for ix in range(len(locSpacing))
-    ]
-    correctionTrans[ix]["Size"] = [str(i) for i in alphaImgHiRes.GetSize()]
-
-alphaImgHiRes = sitk.Transformix(alphaImgHiRes, correctionTrans)
-alphaImgHiRes = alphaImgHiRes * sitk.Resample(correction_Jac, alphaImgHiRes, sitk.Transform(), sitk.sitkLinear)
-sitk.WriteImage(alphaImgHiRes, pjoin(fOutputDir, "alphaImgHiRes2_cor.nii"))
-
 ############################
 ## Generate alpha low res ##
 ############################
 
-alphaImgLowRes = iQID.generatePixelatedImage(
-    imageScalingFactor=scalingFactor, decayCorrect=True
-)
-
+alphaImgLowRes = sitk.ReadImage(r'C:\OUTPUT\iQID Coreg\September 2024\T2_RTum_064_13_15_17\alphaImgLowRes_corr.nii')
 sitk.WriteImage(alphaImgLowRes, pjoin(fOutputDir, "alphaImgLowRes.nii"))
-
-for ix in range(len(correctionTrans)):
-    locSpacing = [float(i) for i in correctionTrans[ix]["Spacing"]]
-    correctionTrans[ix]["Spacing"] = [str(i) for i in alphaImgLowRes.GetSpacing()]
-
-    sizeFac = [
-        float(locSpacing[ix] / float(correctionTrans[ix]["Spacing"][ix]))
-        for ix in range(len(locSpacing))
-    ]
-    correctionTrans[ix]["Size"] = [str(i) for i in alphaImgLowRes.GetSize()]
-
-
-alphaImgLowRes = sitk.Transformix(alphaImgLowRes, correctionTrans)
-alphaImgLowRes = alphaImgLowRes * sitk.Resample(correction_Jac, alphaImgLowRes, sitk.Transform(), sitk.sitkLinear)
-sitk.WriteImage(alphaImgLowRes, pjoin(fOutputDir, "alphaImgLowRes_corr.nii"))
-
 #######################################
 ## Get correspondence between images ##
 #######################################
@@ -158,8 +113,12 @@ resampler.SetSize(newSize)
 DAPIinAlpha = resampler.Execute(DAPIinAlpha)
 phaloidininAlpha = resampler.Execute(phaloidininAlpha)
 
+
+##########
 # Get bounding boxes for sections
-boundingBoxes = ImageManipulation.getObjectBoundingBoxes(phaloidininAlpha + DAPIinAlpha)
+##########
+
+boundingBoxes = ImageManipulation.getObjectBoundingBoxes(phaloidininAlpha + DAPIinAlpha, numSections=1)
 
 phaloidinCuts = ImageManipulation.applyObjectBounsdingBoxes(
     phaloidininAlpha, boundingBoxes
@@ -190,7 +149,6 @@ for ixt, iAlpha in enumerate(alphaImgCuts):
 
 #  Create nice Composite images
 ImageManipulation.createComposites(
-    phaloidinCuts, DAPICuts, alphaImgCuts, outputDir=fOutputDir
+    phaloidinCuts, DAPICuts, alphaImgCutsHiRes, outputDir=fOutputDir
 )
-
 print(f"Succesfully completed {fSampleName}")
