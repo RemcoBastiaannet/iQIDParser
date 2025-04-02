@@ -14,6 +14,10 @@ from MicroscopeFileReader import ImageManipulation
 
 import pickle
 from aicspylibczi import CziFile
+import openslide
+
+def rgba2gray(rgba):
+    return np.dot(rgba[..., :3], [0.2989, 0.5870, 0.1140])
 
 
 Tk().withdraw()  # we don't want a full GUI, so keep the root window from appearing
@@ -45,24 +49,27 @@ fOutputDir = r'c:\OUTPUT\iQID Coreg\September 2024\Kidneys'
 fOutputDir = pjoin(fOutputDir, fSampleName)# + '_without_warping_corr')
 os.makedirs(fOutputDir, exist_ok=True)
 
-# %% Loading files
-micFile = CziFile(fMicroscopyFile)
+try:
+# Loading files
+    micFile = CziFile(fMicroscopyFile)
 
-# Extract physical pixel sizes
-scaling = micFile.meta.findall('.//Scaling/Items/Distance')
-MicroscopePixelSpacing = [float(scaling[0].find('Value').text) * 1E6, float(scaling[1].find('Value').text) *1E6]
+    # Extract physical pixel sizes
+    scaling = micFile.meta.findall('.//Scaling/Items/Distance')
+    MicroscopePixelSpacing = [float(scaling[0].find('Value').text) * 1E6, float(scaling[1].find('Value').text) *1E6]
 
 
+    DAPI = sitk.GetImageFromArray(micFile.read_mosaic(C=0, scale_factor=micScalingFactor)[0,::])
+    DAPI.SetSpacing([i / micScalingFactor for i in  MicroscopePixelSpacing])
 
-DAPI = sitk.GetImageFromArray(micFile.read_mosaic(C=0, scale_factor=micScalingFactor)[0,::])
-DAPI.SetSpacing([i / micScalingFactor for i in  MicroscopePixelSpacing])
+    Phalloidin = sitk.GetImageFromArray(micFile.read_mosaic(C=1, scale_factor=micScalingFactor)[0,::])
+    Phalloidin.SetSpacing([i / micScalingFactor for i in  MicroscopePixelSpacing])
 
-Phalloidin = sitk.GetImageFromArray(micFile.read_mosaic(C=1, scale_factor=micScalingFactor)[0,::])
-Phalloidin.SetSpacing([i / micScalingFactor for i in  MicroscopePixelSpacing])
+    #Correct for intensity changes
+    # Phalloidin = sitk.AdaptiveHistogramEqualization(Phalloidin)
+    # DAPI = sitk.AdaptiveHistogramEqualization(DAPI)
 
-#Correct for intensity changes
-# Phalloidin = sitk.AdaptiveHistogramEqualization(Phalloidin)
-# DAPI = sitk.AdaptiveHistogramEqualization(DAPI)
+except RuntimeError: #So this was not a CZI file
+    slide = openslide.OpenSlide(fMicroscopyFile)
 
 correctionTrans = [
     sitk.ReadParameterFile(rf"C:\OUTPUT\iQID Coreg\TransRectifyMeasurement_{ixs}.txt")
@@ -83,15 +90,15 @@ iQID = iQIDParser(fiQIDData, listmodeType="Compressed")
 alphaImgHiRes = iQID.generatePixelatedImage(imageScalingFactor=2, decayCorrect=True)
 sitk.WriteImage(alphaImgHiRes, pjoin(fOutputDir, "alphaImgHiRes.nii"))
 
-for ix in range(len(correctionTrans)):
-    locSpacing = [float(i) for i in correctionTrans[ix]["Spacing"]]
-    correctionTrans[ix]["Spacing"] = [str(i) for i in alphaImgHiRes.GetSpacing()]
-
-    sizeFac = [
-        float(locSpacing[ix] / float(correctionTrans[ix]["Spacing"][ix]))
-        for ix in range(len(locSpacing))
-    ]
-    correctionTrans[ix]["Size"] = [str(i) for i in alphaImgHiRes.GetSize()]
+#for ix in range(len(correctionTrans)):
+#    locSpacing = [float(i) for i in correctionTrans[ix]["Spacing"]]
+#    correctionTrans[ix]["Spacing"] = [str(i) for i in alphaImgHiRes.GetSpacing()]
+#
+#    sizeFac = [
+#        float(locSpacing[ix] / float(correctionTrans[ix]["Spacing"][ix]))
+#        for ix in range(len(locSpacing))
+#    ]
+#    correctionTrans[ix]["Size"] = [str(i) for i in alphaImgHiRes.GetSize()]
 
 alphaImgHiRes = sitk.Transformix(alphaImgHiRes, correctionTrans)
 alphaImgHiRes = alphaImgHiRes * sitk.Resample(correction_Jac, alphaImgHiRes, sitk.Transform(), sitk.sitkLinear)
@@ -107,15 +114,15 @@ alphaImgLowRes = iQID.generatePixelatedImage(
 
 sitk.WriteImage(alphaImgLowRes, pjoin(fOutputDir, "alphaImgLowRes.nii"))
 
-for ix in range(len(correctionTrans)):
-    locSpacing = [float(i) for i in correctionTrans[ix]["Spacing"]]
-    correctionTrans[ix]["Spacing"] = [str(i) for i in alphaImgLowRes.GetSpacing()]
-
-    sizeFac = [
-        float(locSpacing[ix] / float(correctionTrans[ix]["Spacing"][ix]))
-        for ix in range(len(locSpacing))
-    ]
-    correctionTrans[ix]["Size"] = [str(i) for i in alphaImgLowRes.GetSize()]
+#for ix in range(len(correctionTrans)):
+#    locSpacing = [float(i) for i in correctionTrans[ix]["Spacing"]]
+#    correctionTrans[ix]["Spacing"] = [str(i) for i in alphaImgLowRes.GetSpacing()]
+#
+#    sizeFac = [
+#        float(locSpacing[ix] / float(correctionTrans[ix]["Spacing"][ix]))
+#        for ix in range(len(locSpacing))
+#    ]
+#    correctionTrans[ix]["Size"] = [str(i) for i in alphaImgLowRes.GetSize()]
 
 
 alphaImgLowRes = sitk.Transformix(alphaImgLowRes, correctionTrans)
@@ -159,7 +166,7 @@ DAPIinAlpha = resampler.Execute(DAPIinAlpha)
 phaloidininAlpha = resampler.Execute(phaloidininAlpha)
 
 # Get bounding boxes for sections
-boundingBoxes = ImageManipulation.getObjectBoundingBoxes(phaloidininAlpha + DAPIinAlpha)
+boundingBoxes = ImageManipulation.getObjectBoundingBoxes(phaloidininAlpha + DAPIinAlpha, numSections=1)
 
 phaloidinCuts = ImageManipulation.applyObjectBounsdingBoxes(
     phaloidininAlpha, boundingBoxes
