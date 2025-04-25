@@ -3,10 +3,9 @@ import matplotlib.pyplot as plt
 import SimpleITK as sitk
 
 
-fFiles = [
-    r"Y:\Calibration Images\Dots\Raw-Filtered_Images\CameraID-22286554_images.dat",
-    r"Y:\Calibration Images\Circles\Raw-Filtered_Images\CameraID-22286554_images.dat",
-    r"Y:\Calibration Images\Squares\Raw-Filtered_Images\CameraID-22286554_images.dat",
+fFiles = [r"", #PATH TO DOTS *_images.dat; get these files from calibaration during installation
+          r"", #PATH TO CIRCLES *_images.dat; get these files from calibaration during installation
+          r""  #PATH TO SQUARES *_image.dat; get these files from calibaration during installation
 ]
 
 names = ["Dots", "Circles", "Squares"]
