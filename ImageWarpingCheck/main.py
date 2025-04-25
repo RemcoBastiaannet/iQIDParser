@@ -4,8 +4,7 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import sys
-sys.path.append('../__GenPlotsForPaper') #bad...
-sys.path.append('__GenPlotsForPaper') #bad...
+
 from plotOverlay import overlay_plot
 import matplotlib.widgets as widgets
 from mpl_toolkits.axes_grid1 import make_axes_locatable
