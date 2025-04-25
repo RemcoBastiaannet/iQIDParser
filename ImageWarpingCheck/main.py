@@ -17,8 +17,6 @@ DOTSPACING= 1000 #micrometer
 FOV = 100000 #micrometer
 PIXELSPACING = 1/18.85 * 1000  #* 0.998701 #micron/pix
 
-# fDotPattern = r'C:\Users\remco\Washington University in St. Louis\Bastiaannet Lab - Lab Management - Lab Management\Materials and Equipment\iQID\Johns Hopkins - iQID Mega -Scale and Dots\_DotsSUM_CameraID-21249222_images.tif'
-# fSquarePattern = r'C:\Users\remco\Washington University in St. Louis\Bastiaannet Lab - Lab Management - Lab Management\Materials and Equipment\iQID\Johns Hopkins - iQID Mega -Scale and Dots\xy_SUM_CameraID-21249222_images.tif'
 fDotPattern = 'Dots.nii'
 fSquarePattern = r'Squares.nii'
 
@@ -396,7 +394,6 @@ sitk.WriteImage(squaresGenInMeasured, 'squaresGenInMeasured.nii')
 
 
 #%%
-# FIX THIS PART!!!!
 
 dotsGenInMeasured, initialTrans = getPerfectModelToMeasurement(dotPatternMeasured, dotsGen, dotsGenSmall)
 # dotsSemiFixed = sitk.Transformix(dotPatternMeasured, squaresMeasuredToperfect)
@@ -419,7 +416,6 @@ plt.gcf().savefig('CorrectedDotsOverlay.png', dpi = 900)
 ##############################################
 
 squareWarping = generateWarpingGratePattern(dotPatternMeasured)
-# squareWarping.SetOrigin((+1250, -1420))
 squaredWarpingWarped = sitk.Transformix( squareWarping, squaresMeasuredToperfect )
 
 # #Get Inverse Transform
