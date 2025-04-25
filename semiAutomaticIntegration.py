@@ -22,13 +22,12 @@ def rgba2gray(rgba):
 
 Tk().withdraw()  # we don't want a full GUI, so keep the root window from appearing
 
-fMicroscopyDir = r"C:\Users\remco\Box\Lab Data\Sep 2024\Alpha Camera Slides\After Pap Pen (APP)"
-fMicroscopyDir = r"C:\Users\nzaid1\OneDrive - Johns Hopkins\Documents\A_Experiments\NZ\Bi213_Aug_2024"
+fMicroscopyDir = r"" #DEFAULT PATH HERE
+fOutDir = r"" #DEFAULT PATH HERE
+fAlphaCameraDir = r"" #DEFAULT PATH HERE
+fOutDir = r"" #DEFAULT PATH HERE
 
-fOutDir = r"C:\OUTPUT\iQID Coreg\September 2024"
-fAlphaCameraDir = r"F:\DATA\iQID\September 2024"
-fOutDir = r"C:\Users\nzaid1\OneDrive - Johns Hopkins\Documents\A_Experiments\NZ\Bi213_Aug_2024\New folder"
-fAlphaCameraDir = r"C:\Users\nzaid1\OneDrive - Johns Hopkins\Documents\A_Experiments\NZ\Bi213_Aug_2024\August_13_213Bi_90min3"
+fPathToWarpCorr = r"" #PATH To warping corrections HERE
 
 
 scalingFactor = 1
@@ -40,22 +39,15 @@ micScalingFactor = 1 / 10.
 # %% Asking for data location
 
 fIQID = askdirectory(title="Select iQID listmode directory", initialdir=fAlphaCameraDir)
-# fIQID = r'F:\DATA\iQID\September 2024\September 2024 Timepoint 2 Set 2 Complete'
 
 fiQIDData = pjoin(fIQID, "Listmode")
 
 fMicroscopyFile = askopenfilename(
     title="Select Microscopy file", initialdir=fMicroscopyDir
 )
-# fMicroscopyFile = r'F:\DATA\Slide Scanner\Sep 2024\Alpha Camera Slides\After Pap Pen (APP)\Timepoint 2 Set 2\03_T2_063_RTum_7_9_11_AlphaCamera_Phalloidin_Hoechst_10X.czi'
-
 
 fSampleName = os.path.basename(os.path.normpath(fMicroscopyFile)).split(".czi")[0]
 
-# fOutputDir = askdirectory(title="Select OUTPUT directory", initialdir=fOutDir)
-fOutputDir = r'c:\OUTPUT\iQID Coreg\September 2024\Kidneys'
-# fOutputDir = r'c:\OUTPUT\iQID Coreg\September 2024\6H-048-Kidney-7-9-11'
-fOutputDir = pjoin(fOutputDir, fSampleName)# + '_without_warping_corr')
 fOutputDir = askdirectory(title="Select OUTPUT directory", initialdir=fOutDir)
 
 fOutputDir = pjoin(fOutputDir, fSampleName)
@@ -100,12 +92,12 @@ except RuntimeError: #So this was not a CZI file
 
     Phalloidin = DAPI
 
-#correctionTrans = [
-#    sitk.ReadParameterFile(rf"C:\OUTPUT\iQID Coreg\TransRectifyMeasurement_{ixs}.txt")
-#    for ixs in range(5)
-#]  # TODO: fix this for our camera
+correctionTrans = [
+    sitk.ReadParameterFile(pjoin(fPathToWarpCorr, TransRectifyMeasurement_{ixs}.txt"))
+    for ixs in range(5)
+]  # TODO: fix this for our camera
 
-correction_Jac = sitk.ReadImage(r'C:\OUTPUT\iQID Coreg\TransRectifyMeasurement_Jac.nii')
+correction_Jac = sitk.ReadImage(pjoin(fPathToWarpCorr, TransRectifyMeasurement_Jac.nii'))
 
 
 os.makedirs(fOutputDir, exist_ok=True)
@@ -124,15 +116,15 @@ alphaImgHiRes = iQID.generatePixelatedImage(imageScalingFactor=alpha_hires_scali
 
 sitk.WriteImage(alphaImgHiRes, pjoin(fOutputDir, "alphaImgHiRes.nii"))
 
-#for ix in range(len(correctionTrans)):
-#    locSpacing = [float(i) for i in correctionTrans[ix]["Spacing"]]
-#    correctionTrans[ix]["Spacing"] = [str(i) for i in alphaImgHiRes.GetSpacing()]
-#
-#    sizeFac = [
-#        float(locSpacing[ix] / float(correctionTrans[ix]["Spacing"][ix]))
-#        for ix in range(len(locSpacing))
-#    ]
-#    correctionTrans[ix]["Size"] = [str(i) for i in alphaImgHiRes.GetSize()]
+for ix in range(len(correctionTrans)):
+   locSpacing = [float(i) for i in correctionTrans[ix]["Spacing"]]
+   correctionTrans[ix]["Spacing"] = [str(i) for i in alphaImgHiRes.GetSpacing()]
+
+   sizeFac = [
+       float(locSpacing[ix] / float(correctionTrans[ix]["Spacing"][ix]))
+       for ix in range(len(locSpacing))
+   ]
+   correctionTrans[ix]["Size"] = [str(i) for i in alphaImgHiRes.GetSize()]
 
 alphaImgHiRes = sitk.Transformix(alphaImgHiRes, correctionTrans)
 alphaImgHiRes = alphaImgHiRes * sitk.Resample(correction_Jac, alphaImgHiRes, sitk.Transform(), sitk.sitkLinear)
@@ -148,15 +140,15 @@ alphaImgLowRes = iQID.generatePixelatedImage(
 
 sitk.WriteImage(alphaImgLowRes, pjoin(fOutputDir, "alphaImgLowRes.nii"))
 
-#for ix in range(len(correctionTrans)):
-#    locSpacing = [float(i) for i in correctionTrans[ix]["Spacing"]]
-#    correctionTrans[ix]["Spacing"] = [str(i) for i in alphaImgLowRes.GetSpacing()]
-#
-#    sizeFac = [
-#        float(locSpacing[ix] / float(correctionTrans[ix]["Spacing"][ix]))
-#        for ix in range(len(locSpacing))
-#    ]
-#    correctionTrans[ix]["Size"] = [str(i) for i in alphaImgLowRes.GetSize()]
+for ix in range(len(correctionTrans)):
+   locSpacing = [float(i) for i in correctionTrans[ix]["Spacing"]]
+   correctionTrans[ix]["Spacing"] = [str(i) for i in alphaImgLowRes.GetSpacing()]
+
+   sizeFac = [
+       float(locSpacing[ix] / float(correctionTrans[ix]["Spacing"][ix]))
+       for ix in range(len(locSpacing))
+   ]
+   correctionTrans[ix]["Size"] = [str(i) for i in alphaImgLowRes.GetSize()]
 
 
 alphaImgLowRes = sitk.Transformix(alphaImgLowRes, correctionTrans)
